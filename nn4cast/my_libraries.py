@@ -8,19 +8,13 @@ import xarray as xr
 from scipy import stats as sts
 import scipy.stats as stats
 from scipy import signal
-from scipy.fft import fft 
-from cartopy import crs as ccrs # Cartography library
+from cartopy import crs as ccrs 
 import cartopy as car
-import matplotlib.patches as mpatches
-import matplotlib.colors as colors
-import cartopy.io.img_tiles as cimgt
 import numpy.linalg as linalg
 import numpy.ma as ma
 from scipy.stats import pearsonr
 import matplotlib.dates as mdates
-from cartopy.util import add_cyclic_point #esto es para la banda de latitud que queda en blanco en 0ª
-import matplotlib.dates as mdates
-import cartopy.io.shapereader as shpreader
+from cartopy.util import add_cyclic_point 
 import xskillscore as xs
 import time
 import random
