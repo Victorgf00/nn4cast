@@ -1,7 +1,5 @@
 name: nn4cast
 channels:
-  - anaconda
-  - conda-forge
   - defaults
 dependencies:
   - _tflow_select=2.3.0=mkl
