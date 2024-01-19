@@ -26,7 +26,7 @@ setuptools.setup(
     package_dir={"": "nn4cast"},
     packages=setuptools.find_packages(where=""),
     install_requires=[
-        'numpy==1.23.5', 'matplotlib==3.7.1', 'xarray==2023.2.0', 'pandas==1.5.3', 'xskillscore==0.0.24', 'scipy==1.10.1', 'tensorflow==2.10.0', 'keras==2.10.0', 'keras-tuner==1.3.4', 'scikit-learn==1.2.1'
+        'python==3.9.16', 'numpy==1.23.5', 'matplotlib==3.7.1', 'xarray==2023.2.0', 'pandas==1.5.3', 'xskillscore==0.0.24', 'scipy==1.10.1', 'tensorflow==2.10.0', 'keras==2.10.0', 'keras-tuner==1.3.4', 'scikit-learn==1.2.1'
  ],
     python_requires="==3.9.16",
 )  
