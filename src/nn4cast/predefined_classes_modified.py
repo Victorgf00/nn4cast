@@ -17,6 +17,7 @@ import numpy.linalg as linalg
 import numpy.ma as ma
 from scipy.stats import pearsonr
 import matplotlib.dates as mdates
+import matplotlib.colors as colors
 from cartopy.util import add_cyclic_point 
 import xskillscore as xs
 import time
