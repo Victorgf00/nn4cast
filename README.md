@@ -15,10 +15,9 @@ To get the latest version:
 ```
 
 ## Example to predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
+### I. Import the functions and define the hyperparameters as a dictionary
 ```python
 from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher
-
-#define the hyperparameters of the data and model as a dictionary
 
 hyperparameters = {
     # File paths
@@ -120,4 +119,34 @@ hyperparameters = {
     'outputs_path': "C:/Users/ideapad 5 15ITL05/Desktop/Doctorado/Libreria/Outputs_prueba/"}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
+
+# Access the informative variables
+print('***Informative variables***')
+print(f'Predictor region: {titulo_corr}')
+print(f'Predictor months: {months_x} ; Predictant months: {months_y}')
+print(f'Predictor lat_lims: {lon_lims_x} ; lon_lims: {lat_lims_x} || Predictant lat_lims: {lat_lims_y} ; lon_lims: {lon_lims_y}')
+print(f'Periods for: training= {train_years} ; validation= {validation_years}; testing= {testing_years}')
+print(f'Layers sizes: {layer_sizes} ; activations: {activations} ; dropout_rates: {dropout_rates} ; kernel_regularizer: {kernel_regularizer}')
+```
+
+### II. Preprocessing, Training & Testing the model
+```python
+dictionary_preprocess= Preprocess(dictionary_hyperparams= hyperparameters)
+predicted_value,observed_value= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=False, n_cv_folds=0)
+predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=True, n_cv_folds=8)
+```
+
+### III. Hyperparameter tunning and testing again
+```python
+params_selection = {
+    'pos_number_layers': 5,  # set the maximum value of fully connected layers
+    'pos_layer_sizes': [16, 64, 256],  # set the possible layer sizes
+    'pos_activations': ["elu", "linear"],  # set the possible activation functions (possibilities are all the ones availabe in tensorflow: tf.keras.layers.activations())
+    'pos_dropout': [0.0, 0.01],  # set the possible dropout rates
+    'pos_kernel_regularizer': ["l1_l2"],  # set the possible kernel regularizer (possibilities are: l1_l2, l1, l2, None)
+    'search_skip_connections': False,  # set if searching for skip connections (either intermediate or end_to_end)
+    'pos_conv_layers': 0,  # set the maximum number of convolutional layers, the entry data must be 2D
+    'pos_learning_rate':  [1e-4,1e-3]} # set the possible learning rates
+
+fig4,fig5,fig6, predicted_global_bm, observed_global_bm= Model_searcher(dictionary_hyperparams= hyperparameters, dictionary_preprocess=dictionary_preprocess, dictionary_possibilities= params_selection, max_trials=2, n_cv_folds=8)
 ```
