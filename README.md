@@ -15,7 +15,7 @@ To get the latest version:
 ```
 
 ## Example to predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
-
+```python
 from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher
 
 #define the hyperparameters of the data and model as a dictionary
@@ -120,4 +120,4 @@ hyperparameters = {
     'outputs_path': "C:/Users/ideapad 5 15ITL05/Desktop/Doctorado/Libreria/Outputs_prueba/"}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
-
+```
