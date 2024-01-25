@@ -31,9 +31,9 @@ hyperparameters = {
     'time_lims': [1940, 2020],
     'years': np.arange(1940, 2020+1, 1),
 
-    # Output limits: 
-    'lat_lims_y': [70, 20], #first the northernmost
-    'lon_lims_y': [-100, 40], #it can be used 0-360 or -180-+180
+    # Output limits: for latitude first the northernmost, for longitude either -180-+180 or 0-360, putting first the smaller number
+    'lat_lims_y': [70, 20], 
+    'lon_lims_y': [-100, 40], 
 
     # Input limits
     'lat_lims_x': [55, -20],
