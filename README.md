@@ -58,43 +58,44 @@ hyperparameters = {
     'scale_x': 1, 
     'scale_y': 100, 
 
-    # Overlapping: #this is necessary if there is data for 0 and 360
+    # Overlapping: this is necessary if there is data for 0 and 360
     'overlapping_x': False, 
     'overlapping_y': False, 
 
-    # Latitude regrid
-    'lat_regrid_x': False, #this is necessary if the latitudes are in different points in X and Y, say 1 and 0.5
-    'lat_regrid_y': False, #this is necessary if the latitudes are in different points in X and Y, say 1 and 0.5
+    # Latitude regrid: this is necessary if the latitudes are in different points in X and Y, say 1 and 0.5
+    'lat_regrid_x': False, 
+    'lat_regrid_y': False, 
 
     # Detrending
-    'detrend_x': True, #if you want to do a detrending
-    'detrend_y': True,  #if you want to do a detrending
+    'detrend_x': True, 
+    'detrend_y': True,  
 
-    # Renaming
-    'rename_x': False, #if there is a mismatch between X and Y names of latitude-longitude and lat-lon
-    'rename_y': False, #if there is a mismatch between X and Y names of latitude-longitude and lat-lon
+    # Renaming: if there is a mismatch between X and Y names of latitude-longitude and lat-lon
+    'rename_x': False, 
+    'rename_y': False, 
 
-    # 1 Output
-    '1output': False, #if there is only 1 output_point
+    # 1 Output: if there is only 1 output_point
+    '1output': False, 
 
-    # Nans policy
-    'replace_nans_with_0_predictor': False, #define how to deal with nans in X
-    'replace_nans_with_0_predictant': False, #define how to deal with nans in Y
+    # Nans policy: define how to deal with nans, either delete them or substitute to 0,
+    #when deleting, it flattens the array
+    'replace_nans_with_0_predictor': False, 
+    'replace_nans_with_0_predictant': False, 
 
     # Years for output
     'years_finally_x': np.arange(1940, 2019+1, 1),
-    'jump_year': 1, #this is necesary when the predictor and predictand has different years for each sample, if no set to 0
     'years_finally_y': np.arange(1941, 2020+1, 1),
+    'jump_year': 1, #this is necesary when the predictor and predictand has different years for each sample, if no set to 0
 
-    # Reference period
-    'reference_period': [1950, 2000], #period for computing the mean and std
+    # Reference period: period for computing the mean and standard deviation
+    'reference_period': [1950, 2000], 
 
     # Train, validation, and testing years
     'train_years': [1940, 1989],
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
 
-    # Neural network hyperparameters
+    # Neural network hyperparameters (default parameters)
     'layer_sizes': [1024, 256, 64],
     'activations': [tf.keras.activations.elu, tf.keras.activations.elu, tf.keras.activations.elu],
     'dropout_rates': [0.0],
@@ -118,7 +119,8 @@ hyperparameters = {
     'unidades': 'hPa',
     'titulo_corr': 'Pacific',
     'p_value': 0.1,
-    # Outputs path 
+
+    # Outputs path: define where to save all the plots and datasets
     'outputs_path': "C:/Users/ideapad 5 15ITL05/Desktop/Doctorado/Libreria/Outputs_prueba/"}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
