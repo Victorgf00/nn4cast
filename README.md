@@ -29,8 +29,20 @@ hyperparameters = {
 
     # Time limits
     'time_lims': [1940, 2020],
-    'years': np.arange(1940, 2020+1, 1),
 
+    # Years for output
+    'years_finally_x': np.arange(1940, 2019+1, 1),
+    'years_finally_y': np.arange(1941, 2020+1, 1),
+    'jump_year': 1, #this is necesary when the predictor and predictand has different years for each sample (default=0)
+
+    # Reference period: period for computing the mean and standard deviation
+    'reference_period': [1950, 2000], 
+
+    # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
+    # the years policy is from the input (X)
+    'train_years': [1940, 1989],
+    'validation_years': [1990, 1999],
+    'testing_years': [2000, 2019],
     # Output limits: for latitude first the northernmost, for longitude either -180-+180 or 0-360,
     # putting first the smaller number
     'lat_lims_y': [70, 20], 
@@ -81,20 +93,6 @@ hyperparameters = {
     # when deleting, it flattens the array
     'replace_nans_with_0_predictor': False, 
     'replace_nans_with_0_predictant': False, 
-
-    # Years for output
-    'years_finally_x': np.arange(1940, 2019+1, 1),
-    'years_finally_y': np.arange(1941, 2020+1, 1),
-    'jump_year': 1, #this is necesary when the predictor and predictand has different years for each sample (default=0)
-
-    # Reference period: period for computing the mean and standard deviation
-    'reference_period': [1950, 2000], 
-
-    # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
-    # the years policy is from the input (X)
-    'train_years': [1940, 1989],
-    'validation_years': [1990, 1999],
-    'testing_years': [2000, 2019],
 
     # Neural network hyperparameters (default parameters)
     'layer_sizes': [1024, 256, 64],
