@@ -18,6 +18,8 @@ To get the latest version:
 ### I. Import the functions and define the hyperparameters as a dictionary
 ```python
 from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher
+import numpy as np
+import tensorflow as tf
 
 hyperparameters = {
     # File paths
