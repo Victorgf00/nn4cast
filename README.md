@@ -43,16 +43,15 @@ hyperparameters = {
     'train_years': [1940, 1989],
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
-    # Output limits: for latitude first the northernmost, for longitude either -180-+180 or 0-360,
-    # putting first the smaller number
+
+    # Input and utput limits: for latitude first the northernmost, for longitude either -
+    # -180-(+180) or 0-360, putting first the smaller number
+    'lat_lims_x': [55, -20],
+    'lon_lims_x': [120, 280],
     'lat_lims_y': [70, 20], 
     'lon_lims_y': [-100, 40], 
 
-    # Input limits
-    'lat_lims_x': [55, -20],
-    'lon_lims_x': [120, 280],
-
-    #Variable names
+    #Variable names, as defined in the .nc datasets
     'name_x': 'sst',
     'name_y': 'msl',
 
