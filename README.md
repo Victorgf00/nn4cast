@@ -12,6 +12,7 @@ To get the latest version:
     (<your-env-name>) $ conda install pip
     (<your-env-name>) $ conda install cartopy
     (<your-env-name>) $ pip install git+https://github.com/Victorgf00/nn4cast
+    (<your-env-name>) $ conda install pydot graphviz
 ```
 
 ## Example to predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
