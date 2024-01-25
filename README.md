@@ -30,9 +30,8 @@ hyperparameters = {
     # Time limits
     'time_lims': [1940, 2020],
 
-    # Years for output
-    'years_finally_x': np.arange(1940, 2019+1, 1),
-    'years_finally_y': np.arange(1941, 2020+1, 1),
+    # Years for output: using the policy of the predictor years
+    'years_finally': np.arange(1940, 2019+1, 1), 
     'jump_year': 1, #this is necesary when the predictor and predictand has different years for each sample (default=0)
 
     # Reference period: period for computing the mean and standard deviation
