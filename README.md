@@ -123,12 +123,12 @@ hyperparameters = {
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
 
 # Access the informative variables
-print('***Informative variables***')
-print(f'Predictor region: {titulo_corr}')
-print(f'Predictor months: {months_x} ; Predictant months: {months_y}')
-print(f'Predictor lat_lims: {lon_lims_x} ; lon_lims: {lat_lims_x} || Predictant lat_lims: {lat_lims_y} ; lon_lims: {lon_lims_y}')
-print(f'Periods for: training= {train_years} ; validation= {validation_years}; testing= {testing_years}')
-print(f'Layers sizes: {layer_sizes} ; activations: {activations} ; dropout_rates: {dropout_rates} ; kernel_regularizer: {kernel_regularizer}')
+print('****Informative variables****')
+print(f"Predictor region: {hyperparameters['titulo_corr']}")
+print(f"Predictor months: {hyperparameters['months_x']} ; Predictant months: {hyperparameters['months_y']}")
+print(f"Predictor lat_lims: {hyperparameters['lon_lims_x']} ; lon_lims: {hyperparameters['lat_lims_x']} || Predictant lat_lims: {hyperparameters['lat_lims_y']} ; lon_lims: {hyperparameters['lon_lims_y']}")
+print(f"Periods for: training= {hyperparameters['train_years']} ; validation= {hyperparameters['validation_years']}; testing= {hyperparameters['testing_years']}")
+print(f"Layers sizes: {hyperparameters['layer_sizes']} ; activations: {hyperparameters['activations']} ; dropout_rates: {hyperparameters['dropout_rates']} ; kernel_regularizer: {hyperparameters['kernel_regularizer']}")
 ```
 
 ### II. Preprocessing, Training & Testing the model
