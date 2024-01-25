@@ -31,9 +31,9 @@ hyperparameters = {
     'time_lims': [1940, 2020],
     'years': np.arange(1940, 2020+1, 1),
 
-    # Output limits
-    'lat_lims_y': [70, 20],
-    'lon_lims_y': [-100, 40],
+    # Output limits: 
+    'lat_lims_y': [70, 20], #first the northernmost
+    'lon_lims_y': [-100, 40], #it can be used 0-360 or -180-+180
 
     # Input limits
     'lat_lims_x': [55, -20],
@@ -49,17 +49,17 @@ hyperparameters = {
     'months_y': [1, 2],
     'months_skip_y': ['1940-01', '1940-02'],
 
-    # Regrid degrees: #if you want to do a regrid of the data, if not, just put 1
+    # Regrid degrees: if you want to do a regrid of the data, if not, just put 1
     'regrid_degree_x': 2, 
     'regrid_degree_y': 2, 
 
-    # Data scales
-    'scale_x': 1, #if you want to do a scale of the data, if not, just put 1
-    'scale_y': 100, #if you want to do a scale of the data, if not, just put 1
+    # Data scales: if you want to do a scale of the data, if not, just put 1
+    'scale_x': 1, 
+    'scale_y': 100, 
 
-    # Overlapping
-    'overlapping_x': False, #this is necessary if there is data for 0 and 360
-    'overlapping_y': False, #this is necessary if there is data for 0 and 360
+    # Overlapping: #this is necessary if there is data for 0 and 360
+    'overlapping_x': False, 
+    'overlapping_y': False, 
 
     # Latitude regrid
     'lat_regrid_x': False, #this is necessary if the latitudes are in different points in X and Y, say 1 and 0.5
