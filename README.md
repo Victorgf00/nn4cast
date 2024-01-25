@@ -141,14 +141,15 @@ predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= h
 ### III. Hyperparameter tunning and testing again
 ```python
 params_selection = {
-    'pos_number_layers': 5,  # set the maximum value of fully connected layers
-    'pos_layer_sizes': [16, 64, 256],  # set the possible layer sizes
-    'pos_activations': ["elu", "linear"],  # set the possible activation functions (possibilities are all the ones availabe in tensorflow: tf.keras.layers.activations())
-    'pos_dropout': [0.0, 0.01],  # set the possible dropout rates
-    'pos_kernel_regularizer': ["l1_l2"],  # set the possible kernel regularizer (possibilities are: l1_l2, l1, l2, None)
-    'search_skip_connections': False,  # set if searching for skip connections (either intermediate or end_to_end)
-    'pos_conv_layers': 0,  # set the maximum number of convolutional layers, the entry data must be 2D
-    'pos_learning_rate':  [1e-4,1e-3]} # set the possible learning rates
+    'pos_number_layers': 5,  # set the maximum value of fully connected layers (int)
+    'pos_layer_sizes': [16, 64, 256],  # set the possible layer sizes (list)
+    'pos_activations': ["elu", "linear"],  # set the possible activation functions (possibilities are all the ones availabe in tensorflow: tf.keras.layers.activations()) (list)
+    'pos_dropout': [0.0, 0.01],  # set the possible dropout rates (list)
+    'pos_kernel_regularizer': ["l1_l2"],  # set the possible kernel regularizer (possibilities are: l1_l2, l1, l2, None) (list)
+    'search_skip_connections': False,  # set if searching for skip connections (either intermediate or end_to_end) (bool)
+    'pos_conv_layers': 0,  # set the maximum number of convolutional layers, the entry data must be 2D (int)
+    'pos_learning_rate':  [1e-4,1e-3]} # set the possible learning rates (list)
 
-fig4,fig5,fig6, predicted_global_bm, observed_global_bm= Model_searcher(dictionary_hyperparams= hyperparameters, dictionary_preprocess=dictionary_preprocess, dictionary_possibilities= params_selection, max_trials=2, n_cv_folds=8)
+#In the following line, you can modify the maximum number of trials ("max_trials") that the searcher does to look for the more optimum hyperparameters
+fig4,fig5,fig6, predicted_global_bm, observed_global_bm= Model_searcher(dictionary_hyperparams= hyperparameters, dictionary_preprocess=dictionary_preprocess, dictionary_possibilities= params_selection, max_trials=10, n_cv_folds=8)
 ```
