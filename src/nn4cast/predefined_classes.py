@@ -581,7 +581,7 @@ class ClimateDataEvaluation:
             # Create a pixel-based colormap plot on the given axis
             im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm)
         else:
-            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='both', transform=ccrs.PlateCarree())
+            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='neither', transform=ccrs.PlateCarree())
 
         # Add coastlines to the plot
         ax.coastlines(linewidth=0.75)
