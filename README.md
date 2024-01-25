@@ -90,7 +90,7 @@ hyperparameters = {
     # Reference period: period for computing the mean and standard deviation
     'reference_period': [1950, 2000], 
 
-    # Train, validation, and testing years
+    # Train, validation, and testing years: if dealing with X and Y of different years for each sample, the yera policy is from X
     'train_years': [1940, 1989],
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
