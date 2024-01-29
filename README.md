@@ -155,3 +155,9 @@ params_selection = {
 #In the following line, you can modify the maximum number of trials ("max_trials") that the searcher does to look for the more optimum hyperparameters
 fig4,fig5,fig6, predicted_global_bm, observed_global_bm= Model_searcher(dictionary_hyperparams= hyperparameters, dictionary_preprocess=dictionary_preprocess, dictionary_possibilities= params_selection, max_trials=10, n_cv_folds=8)
 ```
+
+## Citation
+If you use this software in your work, please cite our paper: 
+```markdown
+
+```
