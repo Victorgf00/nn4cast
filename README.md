@@ -3,6 +3,7 @@
 
 ## Installation
 **WARNING**: The environment must be compatible with all the dependencies, and it has been tested with python 3.9.16, future versions could be compatible with newer versions of python and other packages
+
 **NOTE**: Cartopy has to be installed with conda because pip version does not work
 
 To get the latest version:
