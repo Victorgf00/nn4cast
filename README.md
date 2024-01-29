@@ -1,4 +1,4 @@
-# nn4cast
+# NN4CAST
  Repository containing the nn4cast library and some necessary tools to work with it
 
 ## Installation
@@ -16,7 +16,7 @@ To get the latest version:
     (<your-env-name>) $ conda install pydot graphviz
 ```
 
-## Example to predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
+## Example usage: predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
 ### I. Import the functions and define the hyperparameters as a dictionary
 ```python
 from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher
