@@ -161,3 +161,6 @@ If you use this software in your work, please cite our paper:
 ```markdown
 ### PONER CITA
 ```
+
+## Contribution
+This project welcomes contributions and suggestions.
