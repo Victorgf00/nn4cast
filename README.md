@@ -62,7 +62,7 @@ hyperparameters = {
     'months_y': [1, 2],
     'months_skip_y': ['1940-01', '1940-02'],
 
-    # Regrid degrees: if you want to do a regrid of the data, if not, just put 1
+    # Regrid degrees: if you want to do a regrid of the data, if not, just put the original grid resolution
     'regrid_degree_x': 2, 
     'regrid_degree_y': 2, 
 
