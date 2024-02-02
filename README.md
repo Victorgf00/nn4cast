@@ -34,7 +34,8 @@ hyperparameters = {
 
     # Years for output: using the policy of the predictor years
     'years_finally': np.arange(1940, 2019+1, 1), 
-    'jump_year': 1, #this is necesary when the predictor and predictand has different years for each sample (default=0)
+    'jump_year': 1, #this is necesary when the predictor and predictand has different years
+    #for each sample (default=0)
 
     # Reference period: period for computing the mean and standard deviation
     'reference_period': [1950, 2000], 
