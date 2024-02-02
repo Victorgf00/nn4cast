@@ -47,7 +47,7 @@ hyperparameters = {
     'testing_years': [2000, 2019],
 
     # Input and utput limits: for latitude first the northernmost, for longitude either -
-    # -180-(+180) or 0-360, putting first the smaller number
+    # -180-(+180) or 0-360, putting first the smaller number. It is important that the limits are inside the dataset
     'lat_lims_x': [55, -20],
     'lon_lims_x': [120, 280],
     'lat_lims_y': [70, 20], 
