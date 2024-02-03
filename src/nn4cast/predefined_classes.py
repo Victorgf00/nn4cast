@@ -526,6 +526,7 @@ class ClimateDataEvaluation:
         - train_years (tuple): Years for training data.
         - testing_years (tuple): Years for testing data.
         - jump_year (int): Year offset for the predictions (default: 0).
+        - map_nans (numpy.ndarray): Output data original map with nans, necessary to plot correctly the results.
 
     Methods:
         - plotter(): Tool for plotting model outputs.
@@ -536,7 +537,7 @@ class ClimateDataEvaluation:
         - correlations_pannel(): Visualize correlations for each ensemble member in a panel plot.
     """
     def __init__(
-        self, X, X_train, X_test, Y, Y_train, Y_test, lon_y, lat_y, std_y, model, time_lims, train_years, testing_years, jump_year=0):
+        self, X, X_train, X_test, Y, Y_train, Y_test, lon_y, lat_y, std_y, model, time_lims, train_years, testing_years,map_nans, jump_year=0):
         """
         Initialize the ClimateDataEvaluation class with the specified parameters.
 
@@ -557,6 +558,7 @@ class ClimateDataEvaluation:
         self.train_years = train_years
         self.testing_years = testing_years
         self.jump_year = jump_year
+        self.map_nans = map_nans
 
     def plotter(self, data, levs, cmap1, l1, titulo, ax, pixel_style=False, plot_colorbar=True):
         """
@@ -674,9 +676,26 @@ class ClimateDataEvaluation:
             X_test, Y_test, model, testing_years = self.X_test, self.Y_test, self.model, self.testing_years
 
         predicted = model.predict(np.array(X_test))
-        nt, nm= predicted.shape
         test_years = np.arange(testing_years[0]+self.jump_year, testing_years[1]+self.jump_year+1,1)
         
+        def pongonans(matred,mat):
+            out= mat.mean(axis = 0)
+            out= np.tile(out, (matred.shape[0],1))
+            out[:] = np.nan
+            for i in range(0,matred.shape[0]):
+                out_1d= out[i,:]
+                out_1d[~np.isnan(mat.mean(axis = 0))] = matred[i,:]
+                out[i,:]=out_1d
+            return out
+
+        map_orig= self.map_nans
+        nt, nlat, nlon= map_orig.shape
+        map_reshape= np.reshape(np.array(map_orig),(nt, nlat*nlon))
+        
+        predicted= pongonans(predicted,np.array(map_reshape)) #if the predictant has nans
+        Y_test= pongonans(Y_test,np.array(map_reshape)) #if the predictant has nans
+        
+        nt, nm= predicted.shape
         if np.ndim(predicted.shape)<=2:
             predicted= np.reshape(predicted, (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y))))
         
@@ -754,7 +773,7 @@ class ClimateDataEvaluation:
         ClimateDataEvaluation.plotter(self, data, np.linspace(-rango, +rango, 11), 'RdBu_r','Correlation', 'Spatial Correlation', ax, pixel_style=True)
         lon_sig, lat_sig = spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').longitude, \
                         spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').latitude
-        ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
+        #ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
 
         # Subplot 2: Temporal Correlation Plot
         plt.style.use('seaborn')
@@ -775,8 +794,8 @@ class ClimateDataEvaluation:
         plt.style.use('default')
         ax4 = fig.add_subplot(223, projection=ccrs.PlateCarree(0))
         data = spatial_rmse
-        rango= int(np.max(np.array(data)))
-        ClimateDataEvaluation.plotter(self, data, np.arange(0, rango+1, 1), 'OrRd','RMSE', 'Spatial RMSE', ax4, pixel_style=True)
+        rango= int(np.nanmax(np.array(data)))
+        ClimateDataEvaluation.plotter(self, data, np.linspace(0, rango+1, 10), 'OrRd','RMSE', 'Spatial RMSE', ax4, pixel_style=True)
         
         plt.style.use('seaborn')
         # Subplot 4: Temporal RMSE Plot
@@ -913,6 +932,8 @@ class ClimateDataEvaluation:
             plt.savefig(outputs_path + 'correlations_pannel.png')
         return fig
     
+
+    
 class BestModelAnalysis:
     """
     Class for evaluating a climate prediction model.
@@ -939,7 +960,8 @@ class BestModelAnalysis:
         - epochs (int): Number of training epochs.
         - random_seed (int, optional): Seed for random number generation, default is 42.
         - outputs_path (directory): Path to store the outputs.
-
+        - output_original (array): Xarray dataset with the original output dataset with nans.
+    
     Methods:
         - build_model(): Build a deep learning model with hyperparameters defined by the Keras Tuner.
         - tuner_searcher(): Perform hyperparameter search using Keras Tuner.
@@ -948,7 +970,7 @@ class BestModelAnalysis:
 
     def __init__(
         self, input_shape, output_shape, X, X_train,X_valid, X_test, Y, Y_train, Y_valid, Y_test, lon_y, lat_y, std_y, time_lims, train_years, testing_years, params_selection, epochs, 
-        outputs_path, random_seed=42, jump_year=0):
+        outputs_path,output_original, random_seed=42, jump_year=0):
         """
         Initialize the BestModelAnalysis class with the specified parameters.
 
@@ -976,7 +998,8 @@ class BestModelAnalysis:
         self.epochs = epochs
         self.random_seed = random_seed
         self.outputs_path = outputs_path
-
+        self.output_original = output_original
+        
     def build_model(self, hp):
         """
         Build a deep learning model with hyperparameters defined by the Keras Tuner.
@@ -1142,6 +1165,7 @@ class BestModelAnalysis:
         Returns:
             predicted_value, observed_value, fig1 (, fig2): Evaluation results and visualization, obtaining two plots if the cross-validation flag is set to True.
         """     
+
         best_hparams = tuner.oracle.get_best_trials(1)[0].hyperparameters.values
         num_layers = best_hparams['num_layers']
         units_list = [best_hparams[f'units_{i}'] for i in range(num_layers)]
@@ -1181,13 +1205,13 @@ class BestModelAnalysis:
             print(f'Training done (Time taken: {time_taken:.2f} seconds)')
 
             print('Now evalutating the best model on the test set')
-            evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, jump_year=self.jump_year)
+            evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_value,observed_value= evaluations_toolkit_bm.evaluation()
             fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, titulo1=titulo1, titulo2=titulo2, periodo=periodo, titulo_corr=titulo_corr, best_model=True)
             return predicted_value, observed_value, fig1
         else:
             print('Now evalutating the best model via Cross Validation')
-            evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, jump_year=0)
+            evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_global,correct_value= evaluations_toolkit_bm.cross_validation(n_folds=n_cv_folds, model_class=neural_network_bm)
             fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, titulo1=titulo1, titulo2=titulo2, periodo=periodo, titulo_corr=titulo_corr, best_model=True)
             fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, titulo_corr=titulo_corr, best_model=True)
@@ -1250,7 +1274,7 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     model = neural_network.create_model(outputs_path=dictionary_hyperparams['outputs_path'])
     model, record= neural_network.train_model(dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['Y_valid'], dictionary_hyperparams['outputs_path'])
     evaluations_toolkit= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], jump_year=dictionary_hyperparams['jump_year'])
+        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'],dictionary_preprocess['output']['data'], jump_year=dictionary_hyperparams['jump_year'])
     
     if cross_validation==False:
         neural_network.performance_plot(record)
@@ -1282,13 +1306,16 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
 
 def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
     bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], dictionary_hyperparams['outputs_path'], jump_year=dictionary_hyperparams['jump_year'])
+        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], dictionary_hyperparams['outputs_path'], dictionary_preprocess['output']['anomaly'], jump_year=dictionary_hyperparams['jump_year'])
     tuner = bm_class.tuner_searcher(max_trials=max_trials)
+
     predicted_value, observed_value, fig1= bm_class.bm_evaluation(tuner, cross_validation=False, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['unidades'], titulo1=dictionary_hyperparams['titulo1'], titulo2=dictionary_hyperparams['titulo2'], periodo=dictionary_hyperparams['periodo'], titulo_corr=dictionary_hyperparams['titulo_corr'],months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'])
     predicted_global, observed_global, fig2, fig3= bm_class.bm_evaluation(tuner, n_cv_folds=n_cv_folds, cross_validation=True, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['unidades'], titulo1=dictionary_hyperparams['titulo1'], titulo2=dictionary_hyperparams['titulo2'], periodo=dictionary_hyperparams['periodo'], titulo_corr=dictionary_hyperparams['titulo_corr'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'])
     datasets, names = [predicted_value, observed_value, predicted_global,observed_global], ['predicted_test_period_bm', 'observed_test_period_bm','predicted_global_cv_bm', 'observed_global_cv_bm']
     output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
     os.makedirs(output_directory, exist_ok=True)
+    best_model = tuner.get_best_models(num_models=1)[0]
+    best_model.save(output_directory+'/best_model.h5')  # Save the model in HDF5 format
     # Save each dataset to a NetCDF file in the 'data_outputs' folder
     for i, ds in enumerate(datasets, start=1):
         ds.to_netcdf(os.path.join(output_directory, names[i-1]))
