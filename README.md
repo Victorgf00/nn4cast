@@ -25,59 +25,58 @@ import tensorflow as tf
 
 hyperparameters = {
     # File paths
-    'path': 'C:/Users/ideapad 5 15ITL05/Desktop/TFM/Predicciones_y_comparacion_ecmwf/Datasets/',
+    'path': '/home/victor/Desktop/prueba_nn4cast/Datasets/',
     'path_x': 'HadISST1_sst_1870-2019.nc',
-    'path_y': 'slp_ERA5_1940-2023.nc',
+    'path_y': 'aemet_pcp_monthly_5km_1951to2021_regrid005.nc',
 
     # Time limits
-    'time_lims': [1940, 2020],
+    'time_lims': [1951, 2019],
 
     # Years for output: using the policy of the predictor years
-    'years_finally': np.arange(1940, 2019+1, 1), 
-    'jump_year': 1, #this is necesary when the predictor and predictand has different years
-    #for each sample (default=0)
+    'years_finally': np.arange(1951, 2019+1, 1), 
+    'jump_year': 0, #this is necesary when the predictor and predictand has different years for each sample (default=0)
 
     # Reference period: period for computing the mean and standard deviation
-    'reference_period': [1950, 2000], 
+    'reference_period': [1951, 2000], 
 
     # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
     # the years policy is from the input (X)
-    'train_years': [1940, 1989],
+    'train_years': [1951, 1989],
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
 
     # Input and utput limits: for latitude first the northernmost, for longitude either -
-    # -180-(+180) or 0-360, putting first the smaller number. It is important that the limits are inside the dataset
+    # -180-(+180) or 0-360, putting first the smaller number
     'lat_lims_x': [55, -20],
-    'lon_lims_x': [120, 280],
-    'lat_lims_y': [70, 20], 
-    'lon_lims_y': [-100, 40], 
+    'lon_lims_x': [0, 360],
+    'lat_lims_y': [44, 36], 
+    'lon_lims_y': [-10, 5], 
 
     #Variable names, as defined in the .nc datasets
     'name_x': 'sst',
-    'name_y': 'msl',
+    'name_y': 'precipitation',
 
     # Months and months to skip
-    'months_x': [11, 12],
+    'months_x': [9, 10],
     'months_skip_x': ['None'],
-    'months_y': [1, 2],
-    'months_skip_y': ['1940-01', '1940-02'],
+    'months_y': [9, 10],
+    'months_skip_y': ['None'],
 
-    # Regrid degrees: if you want to do a regrid of the data, if not, just put the original grid resolution
+    # Seasonal method: select if computing seasonal means of aggregrates (True if means)
+    'mean_seasonal_method_x': True,
+    'mean_seasonal_method_y': False,
+    
+    # Regrid degrees: if you want to do a regrid of the data, if not, just put 0
     'regrid_degree_x': 2, 
-    'regrid_degree_y': 2, 
+    'regrid_degree_y': 0, 
 
     # Data scales: if you want to do a scale of the data, if not, just put 1
     'scale_x': 1, 
-    'scale_y': 100, 
+    'scale_y': 1, 
 
     # Overlapping: this is necessary if there is data for 0 and 360
     'overlapping_x': False, 
     'overlapping_y': False, 
-
-    # Latitude regrid: this is necessary if the latitudes are in different points in X and Y, say 1 and 0.5
-    'lat_regrid_x': False, 
-    'lat_regrid_y': False, 
 
     # Detrending
     'detrend_x': True, 
@@ -85,7 +84,7 @@ hyperparameters = {
 
     # Renaming: if there is a mismatch between X and Y names of latitude-longitude and lat-lon
     'rename_x': False, 
-    'rename_y': False, 
+    'rename_y': True, 
 
     # 1 Output: if there is only 1 output_point
     '1output': False, 
@@ -111,17 +110,12 @@ hyperparameters = {
 
     # Plotting parameters
     'mapbar': 'bwr',
-    'titulo1': 'Comparison of JF anomalies SLP',
-    'titulo2': 'SST anomaly',
-    'subtitulo1': 'Predictions',
-    'periodo': 'ND',
-    'subtitulo2': 'Observations',
-    'unidades': 'hPa',
-    'titulo_corr': 'Pacific',
+    'units_y': '$kg/m^2$',
+    'region_predictor': 'Pacific+Indian+Atlantic',
     'p_value': 0.1,
 
     # Outputs path: define where to save all the plots and datasets
-    'outputs_path': "C:/Users/ideapad 5 15ITL05/Desktop/Doctorado/Libreria/Outputs_prueba/"}
+    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_precip/Outputs_sst_all/'}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
 
