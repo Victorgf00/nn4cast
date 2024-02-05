@@ -50,21 +50,21 @@ class ClimateDataPreprocessing:
         overlapping (bool, optional): Create a cyclic point for overlapping data. Default is False.
         variable_name (str, optional): The name of the variable to extract. Default is None.
         rename (bool, optional): Rename latitude and longitude dimensions. Default is False.
-        latitude_regrid (bool, optional): Perform latitude regridding. Default is False.
         months (list): List of months to select.
         months_to_drop (list): List of months to drop, default is 'None'
         years_out (list): List of output years.
         reference_period (list): Reference period for normalization [start_year, end_year].
         detrend (bool, optional): Detrend the data using linear regression. Default is False.
         one_output (bool, optional): Return one output for each year. Default is False.
-
+        mean_seasonal_method(bool): Decides how to compute the seasonal aggregates. True if mean, False if sum (default True)
+        
     Methods:
         preprocess_data(): Preprocess the climate data based on the specified parameters.
     """
 
     def __init__(
         self, relative_path, lat_lims, lon_lims, time_lims, scale=1,regrid_degree=1, overlapping=False, variable_name=None, rename=False, latitude_regrid=False,
-        months=None, months_to_drop=None, years_out=None, reference_period=None, detrend=False, one_output=False, jump_year=0):
+        months=None, months_to_drop=None, years_out=None, reference_period=None, detrend=False, one_output=False, jump_year=0, mean_seasonal_method=True):
         """
         Initialize the ClimateDataProcessing class with the specified parameters.
 
@@ -88,6 +88,7 @@ class ClimateDataPreprocessing:
         self.detrend = detrend
         self.one_output = one_output
         self.jump_year = jump_year
+        self.mean_seasonal_method = mean_seasonal_method
 
     def preprocess_data(self):
         """
@@ -110,10 +111,7 @@ class ClimateDataPreprocessing:
         if self.rename:
             data = data.rename({'lat': 'latitude', 'lon': 'longitude'})
 
-        if self.latitude_regrid:
-            lat_newgrid = np.arange(-89, 90, 1)
-            data = data.interp(latitude=np.array(lat_newgrid))
-            data = data.sortby('latitude', ascending=False)
+        data = data.sortby('latitude', ascending=False)
 
         if self.lon_lims[1] > 180:
             data = data.assign_coords(longitude=np.where(data.longitude < 0, 360 + data.longitude, data.longitude)).sortby('longitude')
@@ -123,14 +121,14 @@ class ClimateDataPreprocessing:
         data = data.sel(latitude=slice(self.lat_lims[0], self.lat_lims[1]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
 
         if self.regrid_degree!=0:
-            lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1], self.regrid_degree)
-            lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1], -self.regrid_degree)
-            data = data.interp(longitude=np.array(lon_regrid)).interp(latitude=np.array(lat_regrid))
+            lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1]+self.regrid_degree, self.regrid_degree)
+            lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1]-self.regrid_degree, -self.regrid_degree)
+            data = data.interp(longitude=np.array(lon_regrid), method='nearest').interp(latitude=np.array(lat_regrid), method='nearest')
 
         latitude = data.latitude
         longitude = data.longitude
         data = data[str(self.variable_name)]
-
+        
         if self.overlapping:
             creg, longitude = add_cyclic_point(np.array(data), coord=longitude)
             data = xr.DataArray(
@@ -148,10 +146,13 @@ class ClimateDataPreprocessing:
             data_red = data_red.drop_sel(time=self.months_to_drop)
 
         data_red = data_red.groupby('time.month')
+        
         mean_data = 0
         for i in self.months:
             mean_data += np.array(data_red[i])
-        mean_data /= len(self.months)
+            
+        if self.mean_seasonal_method==True:  
+            mean_data /= len(self.months)
 
         years_out= self.years_out +self.jump_year
 
@@ -163,8 +164,7 @@ class ClimateDataPreprocessing:
                 coords=dict(
                     longitude=(["longitude"], np.array(data.longitude)),
                     latitude=(["latitude"], np.array(data.latitude)), year=years_out
-                )
-            )
+                ))
 
         if self.detrend:
             print(f'Detrending {self.variable_name} data...')
@@ -678,27 +678,27 @@ class ClimateDataEvaluation:
         predicted = model.predict(np.array(X_test))
         test_years = np.arange(testing_years[0]+self.jump_year, testing_years[1]+self.jump_year+1,1)
         
-        def pongonans(matred,mat):
-            out= mat.mean(axis = 0)
-            out= np.tile(out, (matred.shape[0],1))
-            out[:] = np.nan
-            for i in range(0,matred.shape[0]):
-                out_1d= out[i,:]
-                out_1d[~np.isnan(mat.mean(axis = 0))] = matred[i,:]
-                out[i,:]=out_1d
-            return out
+        if np.ndim(predicted)<=2:
+            def pongonans(matred,mat):
+                out= mat.mean(axis = 0)
+                out= np.tile(out, (matred.shape[0],1))
+                out[:] = np.nan
+                for i in range(0,matred.shape[0]):
+                    out_1d= out[i,:]
+                    out_1d[~np.isnan(mat.mean(axis = 0))] = matred[i,:]
+                    out[i,:]=out_1d
+                return out
 
-        map_orig= self.map_nans
-        nt, nlat, nlon= map_orig.shape
-        map_reshape= np.reshape(np.array(map_orig),(nt, nlat*nlon))
-        
-        predicted= pongonans(predicted,np.array(map_reshape)) #if the predictant has nans
-        Y_test= pongonans(Y_test,np.array(map_reshape)) #if the predictant has nans
-        
-        nt, nm= predicted.shape
-        if np.ndim(predicted.shape)<=2:
+            map_orig= self.map_nans
+            nt, nlat, nlon= map_orig.shape
+            map_reshape= np.reshape(np.array(map_orig),(nt, nlat*nlon))
+            
+            predicted= pongonans(predicted,np.array(map_reshape)) #if the predictant has nans
+            Y_test= pongonans(Y_test,np.array(map_reshape)) #if the predictant has nans
+            
+            nt, nm= predicted.shape
             predicted= np.reshape(predicted, (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y))))
-        
+            Y_test= np.reshape(Y_test, (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y))))
         # Create xarray DataArray for predicted values
         predicted = xr.DataArray(
             data=predicted,
@@ -709,7 +709,7 @@ class ClimateDataEvaluation:
                 time=test_years))
 
         correct_value = xr.DataArray(
-            data=np.reshape(Y_test, (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y)))),
+            data=Y_test,
             dims=["year", "latitude", "longitude"],
             coords=dict(
                 longitude=(["longitude"], np.array(self.lon_y)),
@@ -722,7 +722,7 @@ class ClimateDataEvaluation:
         
         return predicted, correct_value
 
-    def correlations(self, predicted, correct_value, outputs_path, threshold, units, titulo1, titulo2, titulo_corr, periodo, best_model=False):
+    def correlations(self, predicted, correct_value, outputs_path, threshold, units, months_x, months_y, var_x, var_y, predictor_region, best_model=False):
         """
         Calculate and visualize various correlation and RMSE metrics for climate predictions.
 
@@ -732,9 +732,6 @@ class ClimateDataEvaluation:
             - outputs_path (str): Output path for saving the plot.
             - threshold (float): Threshold for significance in correlation.
             - units (str): Units for the plot.
-            - titulo1 (str): Title for the first part of the plots.
-            - titulo2 (str): Title for the second part of the plots.
-            - titulo_corr (str): Title specifying the correlation type.
             - periodo (str): Time period for the correlation calculation.
 
         Returns:
@@ -810,7 +807,7 @@ class ClimateDataEvaluation:
         ax5.set_title('Temporal RMSE', fontsize=18)
         ax5.legend(loc='upper right')
         ax5.set_ylabel(f'[{units}]')
-        fig.suptitle(f'Metrics {titulo1} when predicting with {titulo_corr} {periodo} {titulo2}', fontsize=20)
+        fig.suptitle(f'Comparison of metrics of {var_y} from months "{months_y}"  when predicting with {predictor_region} {var_x} from months "{months_x}"', fontsize=20)
         # Adjust layout and save the figure
         plt.tight_layout()
         if best_model==True:
@@ -863,7 +860,7 @@ class ClimateDataEvaluation:
         correct_value = xr.concat(correct_value_list, dim='year')
         return predicted_global,correct_value
 
-    def correlations_pannel(self, n_folds, predicted_global, correct_value, outputs_path,months_x, months_y, titulo_corr, best_model=False):
+    def correlations_pannel(self, n_folds, predicted_global, correct_value, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False):
         """
         Visualize correlations for each ensemble member in a panel plot.
 
@@ -921,7 +918,7 @@ class ClimateDataEvaluation:
         cbar = fig.colorbar(im2, cax=cbar_ax, orientation='vertical', label='Correlation', format="%2.1f")
 
         # Add a common title for the entire figure
-        fig.suptitle(f'Correlations for predicting each time period for SLP months "{months_y}" \n with months "{months_x}" {titulo_corr} SST.',fontsize=18)
+        fig.suptitle(f'Correlations for predicting each time period of {var_y} months "{months_y}" \n with months "{months_x}" of {var_x} from {predictor_region}',fontsize=18)
 
         # Adjust layout for better spacing
         plt.tight_layout(rect=[0, 0, 0.9, 0.95])
@@ -931,8 +928,6 @@ class ClimateDataEvaluation:
         else:
             plt.savefig(outputs_path + 'correlations_pannel.png')
         return fig
-    
-
     
 class BestModelAnalysis:
     """
@@ -1153,7 +1148,7 @@ class BestModelAnalysis:
 
         return tuner
     
-    def bm_evaluation(self, tuner, units, titulo1, titulo2, titulo_corr, periodo, months_x, months_y, n_cv_folds=0, cross_validation=False, threshold=0.1):
+    def bm_evaluation(self, tuner, units, var_x, var_y, months_x, months_y,predictor_region, n_cv_folds=0, cross_validation=False, threshold=0.1):
         """
         Evaluate the best model.
 
@@ -1207,14 +1202,14 @@ class BestModelAnalysis:
             print('Now evalutating the best model on the test set')
             evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_value,observed_value= evaluations_toolkit_bm.evaluation()
-            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, titulo1=titulo1, titulo2=titulo2, periodo=periodo, titulo_corr=titulo_corr, best_model=True)
+            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
             return predicted_value, observed_value, fig1
         else:
             print('Now evalutating the best model via Cross Validation')
             evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_global,correct_value= evaluations_toolkit_bm.cross_validation(n_folds=n_cv_folds, model_class=neural_network_bm)
-            fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, titulo1=titulo1, titulo2=titulo2, periodo=periodo, titulo_corr=titulo_corr, best_model=True)
-            fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, titulo_corr=titulo_corr, best_model=True)
+            fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
+            fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, predictor_region=predictor_region,var_x=var_x, var_y=var_y, best_model=True)
             return predicted_global, correct_value, fig2, fig3
 
 def Dictionary_saver(dictionary):
@@ -1240,13 +1235,13 @@ def Preprocess(dictionary_hyperparams):
 
     data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],overlapping=dictionary_hyperparams['overlapping_x'],variable_name=dictionary_hyperparams['name_x'],
-        rename=dictionary_hyperparams['rename_y'],latitude_regrid=dictionary_hyperparams['lat_regrid_x'], months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'])
-       
+        rename=dictionary_hyperparams['rename_x'], months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
+        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'])
+    
     data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],overlapping=dictionary_hyperparams['overlapping_y'],variable_name=dictionary_hyperparams['name_y'],
-        rename=dictionary_hyperparams['rename_y'],latitude_regrid=dictionary_hyperparams['lat_regrid_y'], months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'], jump_year= dictionary_hyperparams['jump_year'])
+        rename=dictionary_hyperparams['rename_y'], months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
+        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'])
         
     # Preprocess data
     data_input,lat_x,lon_x, data_x, anom_x,norm_x,mean_x,std_x = data_mining_x.preprocess_data()
@@ -1274,12 +1269,12 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     model = neural_network.create_model(outputs_path=dictionary_hyperparams['outputs_path'])
     model, record= neural_network.train_model(dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['Y_valid'], dictionary_hyperparams['outputs_path'])
     evaluations_toolkit= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'],dictionary_preprocess['output']['data'], jump_year=dictionary_hyperparams['jump_year'])
+        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
     
     if cross_validation==False:
         neural_network.performance_plot(record)
         predicted_value,correct_value= evaluations_toolkit.evaluation()
-        fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path=dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['unidades'], titulo1=dictionary_hyperparams['titulo1'], titulo2=dictionary_hyperparams['titulo2'], periodo=dictionary_hyperparams['periodo'], titulo_corr=dictionary_hyperparams['titulo_corr'], best_model=False)
+        fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path=dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
         datasets, names = [predicted_value, correct_value], ['predicted_test_period', 'observed_test_period']
         output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
         os.makedirs(output_directory, exist_ok=True)
@@ -1290,8 +1285,8 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     else:
         predicted_value,correct_value= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
         predicted_value.to_netcdf()
-        fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['unidades'], titulo1=dictionary_hyperparams['titulo1'], titulo2=dictionary_hyperparams['titulo2'], periodo=dictionary_hyperparams['periodo'], titulo_corr=dictionary_hyperparams['titulo_corr'], best_model=False)
-        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], titulo_corr=dictionary_hyperparams['titulo_corr'], best_model=False)
+        fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
+        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False)
         datasets, names = [predicted_value, correct_value], ['predicted_global_cv', 'observed_global_cv']
         output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
         os.makedirs(output_directory, exist_ok=True)
@@ -1306,11 +1301,11 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
 
 def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
     bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], dictionary_hyperparams['outputs_path'], dictionary_preprocess['output']['anomaly'], jump_year=dictionary_hyperparams['jump_year'])
+        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], dictionary_hyperparams['outputs_path'], dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
     tuner = bm_class.tuner_searcher(max_trials=max_trials)
 
-    predicted_value, observed_value, fig1= bm_class.bm_evaluation(tuner, cross_validation=False, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['unidades'], titulo1=dictionary_hyperparams['titulo1'], titulo2=dictionary_hyperparams['titulo2'], periodo=dictionary_hyperparams['periodo'], titulo_corr=dictionary_hyperparams['titulo_corr'],months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'])
-    predicted_global, observed_global, fig2, fig3= bm_class.bm_evaluation(tuner, n_cv_folds=n_cv_folds, cross_validation=True, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['unidades'], titulo1=dictionary_hyperparams['titulo1'], titulo2=dictionary_hyperparams['titulo2'], periodo=dictionary_hyperparams['periodo'], titulo_corr=dictionary_hyperparams['titulo_corr'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'])
+    predicted_value, observed_value, fig1= bm_class.bm_evaluation(tuner, cross_validation=False, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
+    predicted_global, observed_global, fig2, fig3= bm_class.bm_evaluation(tuner, n_cv_folds=n_cv_folds, cross_validation=True, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
     datasets, names = [predicted_value, observed_value, predicted_global,observed_global], ['predicted_test_period_bm', 'observed_test_period_bm','predicted_global_cv_bm', 'observed_global_cv_bm']
     output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
     os.makedirs(output_directory, exist_ok=True)
@@ -1320,4 +1315,3 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
     for i, ds in enumerate(datasets, start=1):
         ds.to_netcdf(os.path.join(output_directory, names[i-1]))
     return fig1, fig2, fig3, predicted_global, observed_global
-
