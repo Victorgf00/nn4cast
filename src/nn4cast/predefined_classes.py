@@ -1351,3 +1351,71 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             cbar.set_label(f'{hyperparameters["units_y"]}', size=10)
             cbar.ax.tick_params(labelsize=10)
             plt.show()
+
+def PC_analysis(data, n_modes, label_variable, var_units, show_plot=True):
+    def quitonans(mat):
+        out = mat[:,~np.isnan(mat.mean(axis = 0))]
+        return out
+
+    def pongonans(matred,mat):
+        out = mat.mean(axis = 0 )
+        #out= np.array(mat)
+        out[:] = np.nan
+        #out[~np.isnan(np.array(mat))] = matred
+        out[~np.isnan(mat.mean(axis = 0))] = matred
+        return out
+        return out
+
+    nt, nlat, nlon= data.shape
+    mapa_orig= data[:,:,:]
+    mapa_reshape= np.reshape(np.array(mapa_orig),(nt, nlat*nlon))
+    lon, lat= data.longitude, data.latitude
+    years= data.year
+
+    data= np.reshape(np.array(data), (nt, nlat*nlon))
+    data_sin_nan= quitonans(data)
+    pca = PCA(n_components=25, whiten=True)
+    pca.fit(data_sin_nan)
+    print('Explained variance ratio:', pca.explained_variance_ratio_[0:n_modes])
+    eofs= pca.components_[0:n_modes]
+    pcs= np.dot(eofs,np.transpose(data_sin_nan))
+    pcs= (pcs-np.mean(pcs,axis=0))/np.std(pcs, axis=0)
+    eofs_reg= np.dot(pcs,data_sin_nan)/(nt-1)
+    eofs = []
+    for i in range(0,n_modes):
+        eof1= pongonans(eofs_reg[i,:],np.array(mapa_reshape))
+        eof1= np.reshape(eof1, (nlat, nlon))
+        eofs.append(eof1)
+        if show_plot==True:
+            # Create a new figure
+            plt.style.use('default')
+            fig = plt.figure(figsize=(14, 3))
+            # Subplot 1: Spatial Correlation Map
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
+            rango = max((abs(np.nanmin(np.array(eof1))),abs(np.nanmax(np.array(eof1)))))
+            num_levels = 20
+            levels = np.linspace(-rango, rango, num_levels)
+            # Create a pixel-based colormap plot on the given axis
+            im = ax.contourf(lon, lat, eof1, cmap='RdBu_r', transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+            ax.coastlines(linewidth=0.75)
+            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.2f")
+            cbar.ax.tick_params(labelsize=7)
+            cbar.set_label(f'[{var_units}]/std', size=15)
+            gl = ax.gridlines(draw_labels=True)
+            gl.xlines = False
+            gl.ylines = False
+            gl.top_labels = False  # Disable top latitude labels
+            gl.right_labels = False  # Disable right longitude labels
+
+            ax = fig.add_subplot(122)
+            ax.plot(np.array(years),pcs[i,:])
+            ax.grid()
+            fig.suptitle(f'EOF and PC {label_variable} for mode {i+1} with variance ratio: {pca.explained_variance_ratio_[i]*100:.2f} %', fontsize=15)
+    #we pass the pcs to xarray dataset
+    pcs = xr.DataArray(
+        data=np.transpose(pcs),
+        dims=["time","pc"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            time=np.array(years)))
+    
+    return pcs, np.array(eofs), pca.explained_variance_ratio_
