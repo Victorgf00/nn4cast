@@ -18,7 +18,7 @@ To get the latest version:
 ## Example usage: predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
 ### I. Import the functions and define the hyperparameters as a dictionary
 ```python
-from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher
+from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher, PC_analysis
 import numpy as np
 import tensorflow as tf
 
