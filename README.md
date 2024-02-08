@@ -10,7 +10,6 @@ To get the latest version:
 ```console
     $ conda create -n <your-env-name> python=3.9.16
     $ conda activate <your-env-name>
-    (<your-env-name>) $ conda install pip
     (<your-env-name>) $ conda install cartopy
     (<your-env-name>) $ pip install git+https://github.com/Victorgf00/nn4cast
     (<your-env-name>) $ conda install pydot graphviz
@@ -27,52 +26,52 @@ hyperparameters = {
     # File paths
     'path': '/home/victor/Desktop/prueba_nn4cast/Datasets/',
     'path_x': 'HadISST1_sst_1870-2019.nc',
-    'path_y': 'aemet_pcp_monthly_5km_1951to2021_regrid005.nc',
+    'path_y': 'slp_ERA5_1940-2023.nc',
 
     # Time limits
-    'time_lims': [1951, 2019],
+    'time_lims': [1950, 2019],
 
     # Years for output: using the policy of the predictor years
-    'years_finally': np.arange(1951, 2019+1, 1), 
+    'years_finally': np.arange(1950, 2019+1, 1), 
     'jump_year': 0, #this is necesary when the predictor and predictand has different years for each sample (default=0)
 
     # Reference period: period for computing the mean and standard deviation
-    'reference_period': [1951, 2000], 
+    'reference_period': [1950, 2000], 
 
     # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
     # the years policy is from the input (X)
-    'train_years': [1951, 1989],
+    'train_years': [1950, 1989],
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
 
     # Input and utput limits: for latitude first the northernmost, for longitude either -
     # -180-(+180) or 0-360, putting first the smaller number
     'lat_lims_x': [55, -20],
-    'lon_lims_x': [0, 360],
-    'lat_lims_y': [44, 36], 
-    'lon_lims_y': [-10, 5], 
+    'lon_lims_x': [120, 280],
+    'lat_lims_y': [75, 15], 
+    'lon_lims_y': [-100, 30], 
 
     #Variable names, as defined in the .nc datasets
     'name_x': 'sst',
-    'name_y': 'precipitation',
+    'name_y': 'msl',
 
     # Months and months to skip
-    'months_x': [9, 10],
+    'months_x': [10, 11],
     'months_skip_x': ['None'],
-    'months_y': [9, 10],
+    'months_y': [11, 12],
     'months_skip_y': ['None'],
 
     # Seasonal method: select if computing seasonal means of aggregrates (True if means)
     'mean_seasonal_method_x': True,
-    'mean_seasonal_method_y': False,
+    'mean_seasonal_method_y': True,
     
     # Regrid degrees: if you want to do a regrid of the data, if not, just put 0
     'regrid_degree_x': 2, 
-    'regrid_degree_y': 0, 
+    'regrid_degree_y': 2, 
 
     # Data scales: if you want to do a scale of the data, if not, just put 1
     'scale_x': 1, 
-    'scale_y': 1, 
+    'scale_y': 100, 
 
     # Overlapping: this is necessary if there is data for 0 and 360
     'overlapping_x': False, 
@@ -81,10 +80,6 @@ hyperparameters = {
     # Detrending
     'detrend_x': True, 
     'detrend_y': True,  
-
-    # Renaming: if there is a mismatch between X and Y names of latitude-longitude and lat-lon
-    'rename_x': False, 
-    'rename_y': True, 
 
     # 1 Output: if there is only 1 output_point
     '1output': False, 
@@ -110,12 +105,13 @@ hyperparameters = {
 
     # Plotting parameters
     'mapbar': 'bwr',
-    'units_y': '$kg/m^2$',
-    'region_predictor': 'Pacific+Indian+Atlantic',
+    'units_x': '[$^{\circ}C$]',
+    'units_y': '[$hPa$]',
+    'region_predictor': 'Pacific',
     'p_value': 0.1,
 
     # Outputs path: define where to save all the plots and datasets
-    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_precip/Outputs_sst_all/'}
+    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_slp/Outputs_ND/'}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
 
@@ -135,7 +131,7 @@ predicted_value,observed_value= Model_build_and_test(dictionary_hyperparams= hyp
 predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=True, n_cv_folds=8)
 ```
 
-### III. Hyperparameter tunning and testing again (optional)
+### III. Hyperparameter tunning and testing again
 ```python
 params_selection = {
     'pos_number_layers': 5,  # set the maximum value of fully connected layers (int)
