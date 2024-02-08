@@ -131,7 +131,12 @@ predicted_value,observed_value= Model_build_and_test(dictionary_hyperparams= hyp
 predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=True, n_cv_folds=8)
 ```
 
-### III. Hyperparameter tunning and testing again
+### III. Preprocessing, Training & Testing the model
+```python
+Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=15, predictions=predicted_global, observations=observed_global)
+```
+
+### IV. Hyperparameter tunning and testing again
 ```python
 params_selection = {
     'pos_number_layers': 5,  # set the maximum value of fully connected layers (int)
