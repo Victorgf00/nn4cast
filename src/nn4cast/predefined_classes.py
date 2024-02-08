@@ -25,6 +25,7 @@ from sklearn.model_selection import KFold
 import os
 import shutil
 import yaml
+import matplotlib.gridspec as gridspec
 
 #The following two lines are coded to avoid the warning unharmful message.
 import warnings
@@ -49,7 +50,6 @@ class ClimateDataPreprocessing:
         regrid_degree (int, optional): The degree of grid regridding. Default is 2.
         overlapping (bool, optional): Create a cyclic point for overlapping data. Default is False.
         variable_name (str, optional): The name of the variable to extract. Default is None.
-        rename (bool, optional): Rename latitude and longitude dimensions. Default is False.
         months (list): List of months to select.
         months_to_drop (list): List of months to drop, default is 'None'
         years_out (list): List of output years.
@@ -108,11 +108,11 @@ class ClimateDataPreprocessing:
         time = data['time'].astype('datetime64[M]')
         data = data.assign_coords(time=time)
 
-        if self.rename:
+        if 'latitude' not in data.coords or 'longitude' not in data.coords:
             data = data.rename({'lat': 'latitude', 'lon': 'longitude'})
 
         data = data.sortby('latitude', ascending=False)
-
+        
         if self.lon_lims[1] > 180:
             data = data.assign_coords(longitude=np.where(data.longitude < 0, 360 + data.longitude, data.longitude)).sortby('longitude')
         else:
@@ -124,7 +124,7 @@ class ClimateDataPreprocessing:
             lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1]+self.regrid_degree, self.regrid_degree)
             lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1]-self.regrid_degree, -self.regrid_degree)
             data = data.interp(longitude=np.array(lon_regrid), method='nearest').interp(latitude=np.array(lat_regrid), method='nearest')
-
+        
         latitude = data.latitude
         longitude = data.longitude
         data = data[str(self.variable_name)]
@@ -445,10 +445,12 @@ class NeuralNetworkModel:
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         if outputs_path:
             if best_model==True:
-                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
             else:
-                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
-            
+                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
+
         return model
 
     def train_model(self, X_train, Y_train, X_valid, Y_valid, outputs_path=None, best_model=False):
@@ -770,7 +772,7 @@ class ClimateDataEvaluation:
         ClimateDataEvaluation.plotter(self, data, np.linspace(-rango, +rango, 11), 'RdBu_r','Correlation', 'Spatial Correlation', ax, pixel_style=True)
         lon_sig, lat_sig = spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').longitude, \
                         spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').latitude
-        #ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
+        ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
 
         # Subplot 2: Temporal Correlation Plot
         plt.style.use('seaborn')
@@ -806,7 +808,7 @@ class ClimateDataEvaluation:
 
         ax5.set_title('Temporal RMSE', fontsize=18)
         ax5.legend(loc='upper right')
-        ax5.set_ylabel(f'[{units}]')
+        ax5.set_ylabel(f'{units}')
         fig.suptitle(f'Comparison of metrics of {var_y} from months "{months_y}"  when predicting with {predictor_region} {var_x} from months "{months_x}"', fontsize=20)
         # Adjust layout and save the figure
         plt.tight_layout()
@@ -1235,12 +1237,12 @@ def Preprocess(dictionary_hyperparams):
 
     data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],overlapping=dictionary_hyperparams['overlapping_x'],variable_name=dictionary_hyperparams['name_x'],
-        rename=dictionary_hyperparams['rename_x'], months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
+        months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
         reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'])
     
     data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],overlapping=dictionary_hyperparams['overlapping_y'],variable_name=dictionary_hyperparams['name_y'],
-        rename=dictionary_hyperparams['rename_y'], months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
+        months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
         reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'])
         
     # Preprocess data
@@ -1315,3 +1317,37 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
     for i, ds in enumerate(datasets, start=1):
         ds.to_netcdf(os.path.join(output_directory, names[i-1]))
     return fig1, fig2, fig3, predicted_global, observed_global
+
+def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, model=None):
+    evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
+            dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], model, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
+    evaluations_toolkit_output= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
+            dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
+    
+    for i in range(hyperparameters['years_finally'][0],hyperparameters['years_finally'][-1]+1,1):
+            fig = plt.figure(figsize=(10,4), constrained_layout=True)
+            # Specify the relative subplot widths
+            width_ratios = [4, 1]
+            gs = gridspec.GridSpec(1, 2, width_ratios=width_ratios)
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree(central_longitude=-180))
+            data_input= dictionary_preprocess['input']['anomaly'].sel(year=i)
+            im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x, rang_x/10), 'RdBu_r','Anomalies [$ºC$]', 'Pred', ax, pixel_style=False, plot_colorbar=False)
+            ax.set_title(f"{hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
+
+            cbar = plt.colorbar(im, extend='neither', spacing='proportional',
+                            orientation='horizontal', shrink=0.8, format="%2.1f")
+            cbar.set_label(f'{hyperparameters["units_x"]}', size=10)
+            cbar.ax.tick_params(labelsize=10)
+
+            ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree(central_longitude=0))
+            data_output_pred, data_output_obs= predictions.sel(time=i+hyperparameters['jump_year']), observations.sel(year=i+hyperparameters['jump_year'])
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r','Anomalies [$hPa$]', 'Pred', ax2, pixel_style=False, plot_colorbar=False)
+            im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/10),extend='both',transform=ccrs.PlateCarree())
+            ax2.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
+            
+            ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
+            cbar = plt.colorbar(im2, extend='neither', spacing='proportional',
+                            orientation='horizontal', shrink=0.7, format="%2.1f")
+            cbar.set_label(f'{hyperparameters["units_y"]}', size=10)
+            cbar.ax.tick_params(labelsize=10)
+            plt.show()
