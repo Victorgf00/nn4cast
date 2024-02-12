@@ -938,14 +938,14 @@ class ClimateDataEvaluation:
 
         for i in range(0,n_folds):
             if i < len(axes):  # Only proceed if there are available subplots
-                predictions_loop = predictions_member.sel(time=slice(years[0]+i*time_range,years[time_range]+i*time_range))
+                predictions_loop = predictions_member.sel(time=slice(years[0]+i*time_range,years[time_range-1]+i*time_range))
                 spatial_correlation_member = xr.corr(predictions_loop, correct_value, dim='time')
 
                 # Plot the correlation map
                 ax = axes[i]
                 data_member = spatial_correlation_member-spatial_correlation_global
                 rango=1
-                im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range]+i*time_range), ax=ax, plot_colorbar=False)
+                im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
 
                 if i==n_folds-1:
                     rango=1
