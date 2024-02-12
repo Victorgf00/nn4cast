@@ -18,7 +18,7 @@ To get the latest version:
 ## Example usage: predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
 ### I. Import the functions and define the hyperparameters as a dictionary
 ```python
-from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher, PC_analysis
+rom nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher,Results_plotter,PC_analysis
 import numpy as np
 import tensorflow as tf
 
@@ -44,19 +44,19 @@ hyperparameters = {
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
 
-    # Input and utput limits: for latitude first the northernmost, for longitude either -
+    # Input and output limits: for latitude first the northernmost, for longitude either -
     # -180-(+180) or 0-360, putting first the smaller number
     'lat_lims_x': [55, -20],
     'lon_lims_x': [120, 280],
     'lat_lims_y': [75, 15], 
-    'lon_lims_y': [-100, 30], 
+    'lon_lims_y': [-60, 40], 
 
     #Variable names, as defined in the .nc datasets
     'name_x': 'sst',
     'name_y': 'msl',
 
     # Months and months to skip
-    'months_x': [10, 11],
+    'months_x': [10],
     'months_skip_x': ['None'],
     'months_y': [11, 12],
     'months_skip_y': ['None'],
@@ -77,9 +77,17 @@ hyperparameters = {
     'overlapping_x': False, 
     'overlapping_y': False, 
 
-    # Detrending
+    # Detrending:
     'detrend_x': True, 
     'detrend_y': True,  
+
+    #Filtering:
+    'filter_x': True, 
+    'filter_y': True,
+    'cut_off_x': 12,
+    'cut_off_y': 12,
+    'filter_type_x': 'high',
+    'filter_type_y': 'high',
 
     # 1 Output: if there is only 1 output_point
     '1output': False, 
@@ -111,7 +119,7 @@ hyperparameters = {
     'p_value': 0.1,
 
     # Outputs path: define where to save all the plots and datasets
-    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_slp/Outputs_ND/'}
+    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_slp/Outputs_ND_sst_O/'}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
 
@@ -134,6 +142,7 @@ predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= h
 ### III. Evaluation of some results
 ```python
 Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=15, predictions=predicted_global, observations=observed_global)
+pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, show_plot=True, cmap='RdBu_r')
 ```
 
 ### IV. Hyperparameter tunning and testing again
