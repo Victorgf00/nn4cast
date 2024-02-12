@@ -81,7 +81,8 @@ hyperparameters = {
     'detrend_x': True, 
     'detrend_y': True,  
 
-    #Filtering:
+    # Filtering: select True if passing a filter to isolate some signals,
+    # with the cut_off frequency and the type of filter desired ('low' or 'high')
     'filter_x': True, 
     'filter_y': True,
     'cut_off_x': 12,
