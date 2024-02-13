@@ -852,7 +852,7 @@ class ClimateDataEvaluation:
 
         ax5.set_title('Temporal RMSE', fontsize=18)
         ax5.legend(loc='upper right')
-        ax5.set_ylabel(f'[{units}]')
+        ax5.set_ylabel(f'{units}')
         fig.suptitle(f'Comparison of metrics of {var_y} from months "{months_y}"  when predicting with {predictor_region} {var_x} from months "{months_x}"', fontsize=20)
         # Adjust layout and save the figure
         plt.tight_layout()
