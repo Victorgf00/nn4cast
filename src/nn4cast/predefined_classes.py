@@ -39,6 +39,7 @@ from tensorflow.keras.models import load_model
 plt.style.use('seaborn-v0_8')
 
 
+
 class ClimateDataPreprocessing:
     """
     Class for performing data preprocessing and manipulation on climate data.
@@ -905,7 +906,7 @@ class ClimateDataEvaluation:
         correct_value = xr.concat(correct_value_list, dim='year')
         return predicted_global,correct_value
 
-    def correlations_pannel(self, n_folds, predicted_global, correct_value, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False):
+    def correlations_pannel(self, n_folds, predicted_global, correct_value, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False, plot_differences=False):
         """
         Visualize correlations for each ensemble member in a panel plot.
 
@@ -943,9 +944,15 @@ class ClimateDataEvaluation:
 
                 # Plot the correlation map
                 ax = axes[i]
-                data_member = spatial_correlation_member-spatial_correlation_global
                 rango=1
-                im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
+                if plot_differences==True:
+                    data_member = spatial_correlation_member-spatial_correlation_global
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
+
+                else:
+                    data_member = spatial_correlation_member
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='RdBu_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
+    
 
                 if i==n_folds-1:
                     rango=1
@@ -955,13 +962,17 @@ class ClimateDataEvaluation:
                     im2= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='RdBu_r', l1='Correlation', titulo='ACC Global', ax=ax, plot_colorbar=False)
 
         # Add a common colorbar for all subplots
+        if plot_differences==True:
+            cbar_ax = fig.add_axes([0.92, 0.35, 0.02, 0.5])  # Adjust the position for your preference
+            cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical', label='Correlation difference: ACC_member-ACC_global', format="%2.1f")
 
-        cbar_ax = fig.add_axes([0.92, 0.35, 0.02, 0.5])  # Adjust the position for your preference
-        cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical', label='Correlation difference: ACC_member-ACC_global', format="%2.1f")
-
-        cbar_ax = fig.add_axes([0.92, 0.025, 0.02, 0.3])  # Adjust the position for your preference
-        cbar = fig.colorbar(im2, cax=cbar_ax, orientation='vertical', label='Correlation', format="%2.1f")
-
+            cbar_ax = fig.add_axes([0.92, 0.025, 0.02, 0.3])  # Adjust the position for your preference
+            cbar = fig.colorbar(im2, cax=cbar_ax, orientation='vertical', label='Correlation', format="%2.1f")
+        
+        else: 
+            cbar_ax = fig.add_axes([0.92, 0.025, 0.02, 0.8])  # Adjust the position for your preference
+            cbar = fig.colorbar(im2, cax=cbar_ax, orientation='vertical', label='Correlation', format="%2.1f")
+            
         # Add a common title for the entire figure
         fig.suptitle(f'Correlations for predicting each time period of {var_y} months "{months_y}" \n with months "{months_x}" of {var_x} from {predictor_region}',fontsize=18)
 
@@ -973,338 +984,8 @@ class ClimateDataEvaluation:
         else:
             plt.savefig(outputs_path + 'correlations_pannel.png')
         return fig
-    
-class BestModelAnalysis:
-    """
-    Class for evaluating a climate prediction model.
 
-    Attributes:
-        - input_shape (tuple): Shape of the input data.
-        - output_shape (int or tuple): Shape of the output data.
-        - X (array): Input data for all samples.
-        - X_train (array): Input data for training.
-        - X_valid (array): Input data for validation.
-        - X_test (array): Input data for testing.
-        - Y (array): Output/target data for all samples.
-        - Y_train (array): Output/target data for training.
-        - Y_valid (array): Output/target data for validation.
-        - Y_test (array): Output/target data for testing.
-        - lon_y (array): Longitude data for the output.
-        - lat_y (array): Latitude data for the output.
-        - std_y (array): Standard deviation data for the output.
-        - time_lims (tuple): A tuple containing the time limits (start, end) for the selected time period.
-        - train_years (list): Years used for training.
-        - testing_years (list): Years used for testing.
-        - jump_year (int, optional): Time interval, default is zero.
-        - params_selection (dictionary): Dictionary containing hyperparameter search space.
-        - epochs (int): Number of training epochs.
-        - random_seed (int, optional): Seed for random number generation, default is 42.
-        - outputs_path (directory): Path to store the outputs.
-        - output_original (array): Xarray dataset with the original output dataset with nans.
-    
-    Methods:
-        - build_model(): Build a deep learning model with hyperparameters defined by the Keras Tuner.
-        - tuner_searcher(): Perform hyperparameter search using Keras Tuner.
-        - bm_evaluation(): Evaluate the best model though different methods.
-    """
-
-    def __init__(
-        self, input_shape, output_shape, X, X_train,X_valid, X_test, Y, Y_train, Y_valid, Y_test, lon_y, lat_y, std_y, time_lims, train_years, testing_years, params_selection, epochs, 
-        outputs_path,output_original, random_seed=42, jump_year=0):
-        """
-        Initialize the BestModelAnalysis class with the specified parameters.
-
-        Args:
-            See class attributes for details.
-        """
-        self.input_shape = input_shape
-        self.output_shape = output_shape
-        self.X = X
-        self.X_train= X_train
-        self.X_valid= X_valid
-        self.X_test = X_test
-        self.Y = Y
-        self.Y_train= Y_train
-        self.Y_valid= Y_valid
-        self.Y_test = Y_test
-        self.lon_y = lon_y
-        self.lat_y = lat_y
-        self.std_y = std_y
-        self.time_lims = time_lims
-        self.train_years = train_years
-        self.testing_years = testing_years
-        self.jump_year = jump_year
-        self.params_selection = params_selection
-        self.epochs = epochs
-        self.random_seed = random_seed
-        self.outputs_path = outputs_path
-        self.output_original = output_original
-        
-    def build_model(self, hp):
-        """
-        Build a deep learning model with hyperparameters defined by the Keras Tuner.
-
-        Args:
-            hp (HyperParameters): The hyperparameters object for defining search spaces.
-        Returns:
-            keras.models.Model: A compiled Keras model.
-        """
-        
-        # Access hyperparameters from params_selection
-        pos_number_layers = self.params_selection['pos_number_layers']
-        pos_layer_sizes = self.params_selection['pos_layer_sizes']
-        pos_activations = self.params_selection['pos_activations']
-        pos_dropout = self.params_selection['pos_dropout']
-        pos_kernel_regularizer = self.params_selection['pos_kernel_regularizer']
-        search_skip_connections = self.params_selection['search_skip_connections']
-        pos_conv_layers = self.params_selection['pos_conv_layers']
-        pos_learning_rate = self.params_selection['pos_learning_rate']
-
-        # Debugging: Print generated hyperparameter values
-        print("Generated hyperparameters:")
-        
-        # Define the number of layers within the specified range
-        num_layers = hp.Int('num_layers', 2, pos_number_layers)
-        print("Number of layers:", num_layers)
-        
-        # Define layer sizes based on the specified choices
-        layer_sizes = [hp.Choice('units_' + str(i), pos_layer_sizes) for i in range(num_layers)]
-        print("Layer sizes:", layer_sizes)
-        
-        # Define activations for hidden layers and output layer
-        activations = [hp.Choice('activations_' + str(i), pos_activations) for i in range(len(layer_sizes)-1)] + ['linear']
-        print("Activations:", activations)
-        
-        # Choose kernel regularizer
-        kernel_regularizer = hp.Choice('kernel_regularizer', pos_kernel_regularizer)
-        print("Kernel regularizer:", kernel_regularizer)
-
-        # Choose whether to use batch normalization
-        use_batch_norm = hp.Choice('batch_normalization', ['True','False'])
-        print("Use batch normalization:", use_batch_norm)
-
-        # Choose whether to use He initialization
-        use_initializer = hp.Choice('he_initialization', ['True','False'])
-        print("Use He initialization:", use_initializer)
-
-        # Choose whether to use dropout
-        use_dropout = hp.Choice('dropout', ['True','False'])
-        print("Use dropout:", use_dropout)
-
-        #Define the learning rate
-        learning_rate=hp.Choice('learning_rate', pos_learning_rate)
-
-        # If dropout is chosen, define dropout rates for hidden layers
-        if use_dropout=='True':
-            dropout_rates = [hp.Choice('dropout_' + str(i), pos_dropout) for i in range(len(layer_sizes)-1)]
-            print("Dropout rates:", dropout_rates)
-        else:
-            dropout_rates = [0.0]
-
-        # Choose whether to use skip connections
-        if search_skip_connections=='True':
-            use_initial_skip_connections = hp.Choice('initial_skip_connection', ['True','False'])
-            print("Use initial skip connections:", use_initial_skip_connections)
-            use_intermediate_skip_connections = hp.Choice('intermediate_skip_connections', ['True','False'])
-            print("Use intermediate skip connections:", use_intermediate_skip_connections)
-        else:
-            use_initial_skip_connections, use_intermediate_skip_connections= False, False
-            
-        # Define hyperparameters related to convolutional layers
-        if pos_conv_layers>0:    
-            num_conv_layers = hp.Int('#_convolutional_layers', 0, pos_conv_layers)
-            if num_conv_layers>0:
-                print("Number of Convolutional Layers:", num_conv_layers)
-                num_filters = hp.Choice('number_of_filters_per_conv', [1,4,16])
-                print("Number of filters:", num_filters)
-                pool_size = hp.Choice('pool size', [2,4])
-                print("Pool size:", pool_size)
-                kernel_size = hp.Choice('kernel size', [3,6])
-                print("kernel size:", kernel_size)
-            else:
-                num_filters, pool_size, kernel_size= 0,0,0
-        else: 
-            num_conv_layers,num_filters, pool_size, kernel_size=0,0,0,0
-
-        # Check for empty lists and adjust if needed
-        if not layer_sizes:
-            layer_sizes = [32]  # Default value if no units are specified
-
-        if not activations:
-            activations = ['elu']
-
-        if not dropout_rates:
-            dropout_rates = [0.0]
-
-        # Handling the kernel_regularizer choice
-        if kernel_regularizer == "l1_l2":
-            reg_function = "l1_l2"
-        else:
-            reg_function = None  # No regularization
-
-
-        # Set random seeds for reproducibility
-        np.random.seed(self.random_seed)
-        random.seed(self.random_seed)
-        tf.compat.v1.random.set_random_seed(self.random_seed)
-
-        # Create the model with specified hyperparameters
-        neural_network_cv = NeuralNetworkModel(input_shape=self.input_shape, output_shape=self.output_shape, layer_sizes=layer_sizes, activations=activations, dropout_rates=dropout_rates, kernel_regularizer=reg_function,
-                                        num_conv_layers=num_conv_layers, num_filters=num_filters, pool_size=pool_size, kernel_size=kernel_size, use_batch_norm=True, use_initializer=True, use_dropout=True, use_initial_skip_connections=False, use_intermediate_skip_connections=False, learning_rate=learning_rate,
-                                        epochs=self.epochs)
-        model = neural_network_cv.create_model()
-        # Define the optimizer with a learning rate hyperparameter
-        
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        # Compile the model with the specified optimizer and loss function
-        model.compile(optimizer=optimizer, loss=tf.keras.losses.MeanSquaredError())
-        return model
-    
-    def tuner_searcher(self, max_trials):
-        """
-        Perform hyperparameter search using Keras Tuner.
-
-        Args:
-            max_trials: Maximum number of trials for hyperparameter search.
-
-        Returns:
-            tuner: The Keras Tuner instance.
-            best_model: The best model found during the search.
-            fig: Visualization of the best model architecture.
-        """
-        # Directory for storing trial information
-        trial_dir = self.outputs_path + 'trials_bm_search'
-
-        # Check if the trial directory already exists, if so, it will be deleted
-        if os.path.exists(trial_dir):
-            shutil.rmtree(trial_dir)
-
-        tuner = RandomSearch(
-            lambda hp: BestModelAnalysis.build_model(self,hp=hp),  # Pass the dictionary as an argument
-            objective='val_loss',
-            max_trials=max_trials,
-            executions_per_trial=1, 
-            directory=trial_dir)
-
-        tuner.search(np.array(self.X_train), np.array(self.Y_train),
-                    epochs=self.epochs,
-                    validation_data=(np.array(self.X_valid), np.array(self.Y_valid)),
-                    callbacks=[tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=50)])
-
-        return tuner
-    
-    def bm_evaluation(self, tuner, units, var_x, var_y, months_x, months_y,predictor_region, n_cv_folds=0, cross_validation=False, threshold=0.1):
-        """
-        Evaluate the best model.
-
-        Args:
-            tuner: The Keras Tuner instance.
-            n_cv_folds: Number of folds for cross-validation.
-            cross_validation: Flag indicating whether to perform cross-validation.
-
-        Returns:
-            predicted_value, observed_value, fig1 (, fig2): Evaluation results and visualization, obtaining two plots if the cross-validation flag is set to True.
-        """     
-
-        best_hparams = tuner.oracle.get_best_trials(1)[0].hyperparameters.values
-        num_layers = best_hparams['num_layers']
-        units_list = [best_hparams[f'units_{i}'] for i in range(num_layers)]
-        activations_list = [best_hparams[f'activations_{i}'] for i in range(num_layers-1)]
-
-        kernel_regularizer = best_hparams['kernel_regularizer']
-        batch_normalization = best_hparams['batch_normalization']
-        he_initialization = best_hparams['he_initialization']
-        learning_rate = best_hparams['learning_rate']
-        dropout = best_hparams['dropout']
-        if dropout==True:
-            dropout_list = [best_hparams[f'dropout_{i}'] for i in range(num_layers)]
-        else:
-            dropout_list=[]
-            
-        if not self.params_selection['pos_conv_layers']==0:
-            num_conv_layers = best_hparams['#_convolutional_layers']
-            number_of_filters_per_conv = best_hparams['number_of_filters_per_conv']
-            pool_size = best_hparams['pool size']
-            kernel_size = best_hparams['kernel size']
-        else:
-            num_conv_layers,number_of_filters_per_conv,pool_size,kernel_size = 0,0,0,0
-
-        print('Now creating and training the best model')
-        start_time = time.time()
-
-        neural_network_bm = NeuralNetworkModel(input_shape=self.input_shape, output_shape=self.output_shape, layer_sizes=units_list, activations=activations_list, dropout_rates=dropout_list, kernel_regularizer=kernel_regularizer,
-                                            num_conv_layers=num_conv_layers, num_filters=number_of_filters_per_conv, pool_size=pool_size, kernel_size=kernel_size, use_batch_norm=batch_normalization, use_initializer=he_initialization, use_dropout=dropout, 
-                                            use_initial_skip_connections=False, use_intermediate_skip_connections=False, learning_rate=learning_rate,epochs=self.epochs)
-        model_bm = neural_network_bm.create_model(outputs_path=self.outputs_path, best_model=True)
-        if cross_validation==False:
-            model_bm, record= neural_network_bm.train_model(self.X_train, self.Y_train, self.X_valid, self.Y_valid, self.outputs_path)
-            neural_network_bm.performance_plot(record)
-
-            end_time = time.time()
-            time_taken = end_time - start_time
-            print(f'Training done (Time taken: {time_taken:.2f} seconds)')
-
-            print('Now evalutating the best model on the test set')
-            evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
-            predicted_value,observed_value= evaluations_toolkit_bm.evaluation()
-            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
-            return predicted_value, observed_value, fig1
-        else:
-            print('Now evalutating the best model via Cross Validation')
-            evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
-            predicted_global,correct_value= evaluations_toolkit_bm.cross_validation(n_folds=n_cv_folds, model_class=neural_network_bm)
-            fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
-            fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, predictor_region=predictor_region,var_x=var_x, var_y=var_y, best_model=True)
-            return predicted_global, correct_value, fig2, fig3
-
-def Dictionary_saver(dictionary):
-    # your_dictionary is the dictionary you want to save
-    output_file_path = dictionary['outputs_path']+'dict_hyperparms.yaml'
-
-    # Check if the file already exists
-    print('Checking if the file already exists in the current directory...')
-    if os.path.isfile(output_file_path):
-        overwrite_confirmation = input(f'The file {output_file_path} already exists. Do you want to overwrite it? (yes/no): ')
-        if overwrite_confirmation.lower() != 'yes':
-            print('Operation aborted. The existing file was not overwritten.')
-            # Add further handling or exit the script if needed
-
-    with open(output_file_path, 'w') as yaml_file:
-        yaml.dump(dictionary, yaml_file, default_flow_style=False)
-
-    print(f'Dictionary saved to {output_file_path}')
-
-def Preprocess(dictionary_hyperparams):
-    print('Preprocessing the data')
-    start_time = time.time()
-
-    data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
-        time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],overlapping=dictionary_hyperparams['overlapping_x'],variable_name=dictionary_hyperparams['name_x'],
-        months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'], signal_filtering=dictionary_hyperparams['filter_x'], cut_off=dictionary_hyperparams['cut_off_x'], filter_type=dictionary_hyperparams['filter_type_x'])
-    
-    data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
-        time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],overlapping=dictionary_hyperparams['overlapping_y'],variable_name=dictionary_hyperparams['name_y'],
-        months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'], signal_filtering=dictionary_hyperparams['filter_y'], cut_off=dictionary_hyperparams['cut_off_y'], filter_type=dictionary_hyperparams['filter_type_y'])
-        
-    # Preprocess data
-    data_input,lat_x,lon_x, data_x, anom_x,norm_x,mean_x,std_x = data_mining_x.preprocess_data()
-    data_output,lat_y,lon_y, data_y, anom_y,norm_y,mean_y,std_y = data_mining_y.preprocess_data()
-
-    data_splitter = DataSplitter(train_years=dictionary_hyperparams['train_years'], validation_years=dictionary_hyperparams['validation_years'], testing_years=dictionary_hyperparams['testing_years'], 
-        predictor=norm_x, predictant=norm_y, jump_year=dictionary_hyperparams['jump_year'], replace_nans_with_0_predictor=dictionary_hyperparams['replace_nans_with_0_predictor'], replace_nans_with_0_predictant=dictionary_hyperparams['replace_nans_with_0_predictant'])
-    X, X_train, X_valid, X_test, Y, Y_train, Y_valid, Y_test, input_shape,output_shape = data_splitter.prepare_data()
-
-    end_time = time.time()
-    time_taken = end_time - start_time
-    print(f'Preprocessing done (Time taken: {time_taken:.2f} seconds)')
-    preprocessing_results = {'input': {'lat': lat_x,'lon': lon_x,'data': data_x,'anomaly': anom_x,'normalized': norm_x,'mean': mean_x,'std': std_x,},
-        'output': {'lat': lat_y,'lon': lon_y,'data': data_y,'anomaly': anom_y,'normalized': norm_y,'mean': mean_y,'std': std_y,},
-        'data_split': {'X': X,'X_train': X_train,'X_valid': X_valid,'X_test': X_test,'Y': Y,'Y_train': Y_train,'Y_valid': Y_valid,'Y_test': Y_test,'input_shape': input_shape,'output_shape': output_shape,}}
-    return preprocessing_results
-
-def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_validation=False, n_cv_folds=0):
+def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_validation=False, n_cv_folds=0, plot_differences=False):
     print('Now creating and training the model')
     start_time = time.time()
     neural_network = NeuralNetworkModel(input_shape=dictionary_preprocess['data_split']['input_shape'], output_shape=dictionary_preprocess['data_split']['output_shape'], layer_sizes=dictionary_hyperparams['layer_sizes'], activations=dictionary_hyperparams['activations'], dropout_rates=dictionary_hyperparams['dropout_rates'], kernel_regularizer=dictionary_hyperparams['kernel_regularizer'],
@@ -1318,8 +999,8 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     
     output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
     os.makedirs(output_directory, exist_ok=True)
-    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies')
-                                                          
+    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies'))
+    
     if cross_validation==False:
         neural_network.performance_plot(record)
         predicted_value,correct_value= evaluations_toolkit.evaluation()
@@ -1333,7 +1014,7 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
         predicted_value,correct_value= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
         predicted_value.to_netcdf()
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
-        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False)
+        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False, plot_differences=plot_differences)
         datasets, names = [predicted_value, correct_value], ['predicted_global_cv', 'observed_global_cv']
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
@@ -1344,30 +1025,18 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     print(f'Training done (Time taken: {time_taken:.2f} seconds)')
     return predicted_value, correct_value
 
-def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
-    bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], dictionary_hyperparams['outputs_path'], dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
-    tuner = bm_class.tuner_searcher(max_trials=max_trials)
-
-    predicted_value, observed_value, fig1= bm_class.bm_evaluation(tuner, cross_validation=False, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
-    predicted_global, observed_global, fig2, fig3= bm_class.bm_evaluation(tuner, n_cv_folds=n_cv_folds, cross_validation=True, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
-    datasets, names = [predicted_value, observed_value, predicted_global,observed_global], ['predicted_test_period_bm', 'observed_test_period_bm','predicted_global_cv_bm', 'observed_global_cv_bm']
-    output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
-    os.makedirs(output_directory, exist_ok=True)
-    best_model = tuner.get_best_models(num_models=1)[0]
-    best_model.save(output_directory+'/best_model.h5')  # Save the model in HDF5 format
-    # Save each dataset to a NetCDF file in the 'data_outputs' folder
-    for i, ds in enumerate(datasets, start=1):
-        ds.to_netcdf(os.path.join(output_directory, names[i-1]))
-    return fig1, fig2, fig3, predicted_global, observed_global
-
-def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, model=None):
+def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, save_plots=False):
     evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
-            dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], model, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
+            dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
     evaluations_toolkit_output= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
-            dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
+            dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
     
-    for i in range(hyperparameters['years_finally'][0],hyperparameters['years_finally'][-1]+1,1):
+    if years_to_plot:
+        plotting_years= years_to_plot
+    else:
+        plotting_years= np.arange(hyperparameters['years_finally'][0],hyperparameters['years_finally'][-1]+1,1)
+        
+    for i in plotting_years:
             fig = plt.figure(figsize=(10,4), constrained_layout=True)
             # Specify the relative subplot widths
             width_ratios = [4, 1]
@@ -1393,10 +1062,14 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
                             orientation='horizontal', shrink=0.7, format="%2.1f")
             cbar.set_label(f'{hyperparameters["units_y"]}', size=10)
             cbar.ax.tick_params(labelsize=10)
+            
+            if save_plots==True:
+                output_directory = os.path.join(hyperparameters['outputs_path']+'data_outputs/', 'individual_preditions')
+                os.makedirs(output_directory, exist_ok=True)
+                plt.savefig(output_directory + f"prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}png")
             plt.show()
-
-
-def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, show_plot=True, cmap='RdBu_r'):
+            
+def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
     if 'year' not in observation.coords:
         observation = observation.rename({'time': 'year'})
     if 'year' not in prediction.coords:
@@ -1478,52 +1151,54 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, s
         eof_obs= np.reshape(eof_obs, (nlat_obs, nlon_obs))
         eofs_obs_list.append(eof_obs)
         
-        if show_plot==True:
-            # Create a new figure
-            plt.style.use('default')
-            fig = plt.figure(figsize=(20, 3))
-            # Subplot 1: Spatial Correlation Map
-            ax = fig.add_subplot(141, projection=ccrs.PlateCarree())
-            rango = max((abs(np.nanmin(np.array(eof_pred))),abs(np.nanmax(np.array(eof_pred)))))
-            num_levels = 20
-            levels = np.linspace(-rango, rango, num_levels)
-            # Create a pixel-based colormap plot on the given axis
-            im = ax.contourf(lon_pred, lat_pred, eof_pred, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-            ax.coastlines(linewidth=0.75)
-            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-            cbar.ax.tick_params(labelsize=7)
-            cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
-            gl = ax.gridlines(draw_labels=True)
-            gl.xlines = False
-            gl.ylines = False
-            gl.top_labels = False  # Disable top latitude labels
-            gl.right_labels = False  # Disable right longitude labels
+        # Create a new figure
+        plt.style.use('default')
+        fig = plt.figure(figsize=(20, 3))
+        # Subplot 1: Spatial Correlation Map
+        ax = fig.add_subplot(141, projection=ccrs.PlateCarree())
+        rango = max((abs(np.nanmin(np.array(eof_pred))),abs(np.nanmax(np.array(eof_pred)))))
+        num_levels = 20
+        levels = np.linspace(-rango, rango, num_levels)
+        # Create a pixel-based colormap plot on the given axis
+        im = ax.contourf(lon_pred, lat_pred, eof_pred, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+        ax.coastlines(linewidth=0.75)
+        cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+        cbar.ax.tick_params(labelsize=7)
+        cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
+        gl = ax.gridlines(draw_labels=True)
+        gl.xlines = False
+        gl.ylines = False
+        gl.top_labels = False  # Disable top latitude labels
+        gl.right_labels = False  # Disable right longitude labels
 
-            ax = fig.add_subplot(142)
-            ax.plot(np.array(years),pcs_pred[i,:])
-            ax.grid()
-            
-            ax = fig.add_subplot(143, projection=ccrs.PlateCarree())
-            rango = max((abs(np.nanmin(np.array(eof_obs))),abs(np.nanmax(np.array(eof_obs)))))
-            num_levels = 20
-            levels = np.linspace(-rango, rango, num_levels)
-            # Create a pixel-based colormap plot on the given axis
-            im = ax.contourf(lon_obs, lat_obs, eof_obs, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-            ax.coastlines(linewidth=0.75)
-            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-            cbar.ax.tick_params(labelsize=7)
-            cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
-            gl = ax.gridlines(draw_labels=True)
-            gl.xlines = False
-            gl.ylines = False
-            gl.top_labels = False  # Disable top latitude labels
-            gl.right_labels = False  # Disable right longitude labels
-
-            ax = fig.add_subplot(144)
-            ax.plot(np.array(years),pcs_obs[i,:])
-            ax.grid()
-            fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
+        ax = fig.add_subplot(142)
+        ax.plot(np.array(years),pcs_pred[i,:])
+        ax.grid()
         
+        ax = fig.add_subplot(143, projection=ccrs.PlateCarree())
+        rango = max((abs(np.nanmin(np.array(eof_obs))),abs(np.nanmax(np.array(eof_obs)))))
+        num_levels = 20
+        levels = np.linspace(-rango, rango, num_levels)
+        # Create a pixel-based colormap plot on the given axis
+        im = ax.contourf(lon_obs, lat_obs, eof_obs, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+        ax.coastlines(linewidth=0.75)
+        cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+        cbar.ax.tick_params(labelsize=7)
+        cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
+        gl = ax.gridlines(draw_labels=True)
+        gl.xlines = False
+        gl.ylines = False
+        gl.top_labels = False  # Disable top latitude labels
+        gl.right_labels = False  # Disable right longitude labels
+
+        ax = fig.add_subplot(144)
+        ax.plot(np.array(years),pcs_obs[i,:])
+        ax.grid()
+        fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
+        if save_plots==True:
+            output_directory = os.path.join(hyperparameters['outputs_path']+'data_outputs/', 'PC_analysis')
+            os.makedirs(output_directory, exist_ok=True)
+            plt.savefig(output_directory + f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
     #we pass the pcs to xarray dataset
     pcs_pred = xr.DataArray(
         data=np.transpose(pcs_pred),
@@ -1542,46 +1217,45 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, s
         clusters_obs, percent_obs = clustering(n_clusters, np.array(pcs_obs), np.array(eofs_obs_list), n_modes)
 
         for i in range(0,n_clusters):
-            if show_plot==True:
-                # Create a new figure
-                plt.style.use('default')
-                fig = plt.figure(figsize=(20, 3))
-                # Subplot 1: Spatial Correlation Map
-                ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
-                rango1 = max((abs(np.nanmin(np.array(clusters_pred))),abs(np.nanmax(np.array(clusters_pred)))))
-                rango2 = max((abs(np.nanmin(np.array(clusters_obs))),abs(np.nanmax(np.array(clusters_obs)))))
-                rango = max(rango1, rango2)
-                num_levels = 20
-                levels = np.linspace(-rango, rango, num_levels)
-                # Create a pixel-based colormap plot on the given axis
-                im = ax.contourf(lon_pred, lat_pred, clusters_pred[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-                ax.coastlines(linewidth=0.75)
-                cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-                cbar.ax.tick_params(labelsize=7)
-                cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
-                gl = ax.gridlines(draw_labels=True)
-                gl.xlines = False
-                gl.ylines = False
-                gl.top_labels = False  # Disable top latitude labels
-                gl.right_labels = False  # Disable right longitude labels
-                
-                ax = fig.add_subplot(122, projection=ccrs.PlateCarree())
-                num_levels = 20
-                levels = np.linspace(-rango, rango, num_levels)
-                # Create a pixel-based colormap plot on the given axis
-                im = ax.contourf(lon_pred, lat_pred, clusters_obs[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-                ax.coastlines(linewidth=0.75)
-                cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-                cbar.ax.tick_params(labelsize=7)
-                cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
-                gl = ax.gridlines(draw_labels=True)
-                gl.xlines = False
-                gl.ylines = False
-                gl.top_labels = False  # Disable top latitude labels
-                gl.right_labels = False  # Disable right longitude labels
-                fig.suptitle(f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1} with occurrence predicted: {percent_pred[i]:.2f} % and observed: {percent_obs[i]:.2f} % ', fontsize=15)
-
+            # Create a new figure
+            plt.style.use('default')
+            fig = plt.figure(figsize=(20, 3))
+            # Subplot 1: Spatial Correlation Map
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
+            rango1 = max((abs(np.nanmin(np.array(clusters_pred))),abs(np.nanmax(np.array(clusters_pred)))))
+            rango2 = max((abs(np.nanmin(np.array(clusters_obs))),abs(np.nanmax(np.array(clusters_obs)))))
+            rango = max(rango1, rango2)
+            num_levels = 20
+            levels = np.linspace(-rango, rango, num_levels)
+            # Create a pixel-based colormap plot on the given axis
+            im = ax.contourf(lon_pred, lat_pred, clusters_pred[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+            ax.coastlines(linewidth=0.75)
+            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+            cbar.ax.tick_params(labelsize=7)
+            cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
+            gl = ax.gridlines(draw_labels=True)
+            gl.xlines = False
+            gl.ylines = False
+            gl.top_labels = False  # Disable top latitude labels
+            gl.right_labels = False  # Disable right longitude labels
+            
+            ax = fig.add_subplot(122, projection=ccrs.PlateCarree())
+            num_levels = 20
+            levels = np.linspace(-rango, rango, num_levels)
+            # Create a pixel-based colormap plot on the given axis
+            im = ax.contourf(lon_pred, lat_pred, clusters_obs[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+            ax.coastlines(linewidth=0.75)
+            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+            cbar.ax.tick_params(labelsize=7)
+            cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
+            gl = ax.gridlines(draw_labels=True)
+            gl.xlines = False
+            gl.ylines = False
+            gl.top_labels = False  # Disable top latitude labels
+            gl.right_labels = False  # Disable right longitude labels
+            fig.suptitle(f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1} with occurrence predicted: {percent_pred[i]:.2f} % and observed: {percent_obs[i]:.2f} % ', fontsize=15)
+            plt.savefig(output_directory + f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1}.png')
     else:
         clusters_pred, clusters_obs= None, None
     
-    return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs
+    return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
