@@ -1316,13 +1316,15 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     evaluations_toolkit= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
         dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
     
+    output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
+    os.makedirs(output_directory, exist_ok=True)
+    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies')
+                                                          
     if cross_validation==False:
         neural_network.performance_plot(record)
         predicted_value,correct_value= evaluations_toolkit.evaluation()
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path=dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
         datasets, names = [predicted_value, correct_value], ['predicted_test_period', 'observed_test_period']
-        output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
-        os.makedirs(output_directory, exist_ok=True)
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
             ds.to_netcdf(os.path.join(output_directory, names[i-1]))
@@ -1333,8 +1335,6 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
         fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False)
         datasets, names = [predicted_value, correct_value], ['predicted_global_cv', 'observed_global_cv']
-        output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
-        os.makedirs(output_directory, exist_ok=True)
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
             ds.to_netcdf(os.path.join(output_directory, names[i-1]))
