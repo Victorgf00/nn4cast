@@ -130,13 +130,13 @@ print(f"Layers sizes: {hyperparameters['layer_sizes']} ; activations: {hyperpara
 ```python
 dictionary_preprocess= Preprocess(dictionary_hyperparams= hyperparameters)
 predicted_value,observed_value= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=False, n_cv_folds=0)
-predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=True, n_cv_folds=8)
+predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=True, n_cv_folds=8, plot_differences=False)
 ```
 
 ### III. Evaluation of some results
 ```python
-Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=15, predictions=predicted_global, observations=observed_global)
-pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, show_plot=True, cmap='RdBu_r')
+Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=15, predictions=predicted_global, observations=observed_global, years_to_plot=[1945,2016])
+pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r', save_plots=True)
 ```
 
 ### IV. Hyperparameter tunning and testing again
