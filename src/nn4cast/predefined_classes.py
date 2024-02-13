@@ -1025,7 +1025,8 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     print(f'Training done (Time taken: {time_taken:.2f} seconds)')
     return predicted_value, correct_value
 
-def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, save_plots=False):
+
+def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None):
     evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
             dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
     evaluations_toolkit_output= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
@@ -1063,10 +1064,9 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             cbar.set_label(f'{hyperparameters["units_y"]}', size=10)
             cbar.ax.tick_params(labelsize=10)
             
-            if save_plots==True:
-                output_directory = os.path.join(hyperparameters['outputs_path']+'data_outputs/', 'individual_preditions')
-                os.makedirs(output_directory, exist_ok=True)
-                plt.savefig(output_directory + f"prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}png")
+            output_directory = os.path.join(hyperparameters['outputs_path'], 'individual_predictions')
+            os.makedirs(output_directory, exist_ok=True)
+            plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
             plt.show()
             
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
@@ -1196,9 +1196,9 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
         ax.grid()
         fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
         if save_plots==True:
-            output_directory = os.path.join(hyperparameters['outputs_path']+'data_outputs/', 'PC_analysis')
+            output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
             os.makedirs(output_directory, exist_ok=True)
-            plt.savefig(output_directory + f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
+            plt.savefig(output_directory + f'/EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
     #we pass the pcs to xarray dataset
     pcs_pred = xr.DataArray(
         data=np.transpose(pcs_pred),
@@ -1254,7 +1254,7 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
             gl.top_labels = False  # Disable top latitude labels
             gl.right_labels = False  # Disable right longitude labels
             fig.suptitle(f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1} with occurrence predicted: {percent_pred[i]:.2f} % and observed: {percent_obs[i]:.2f} % ', fontsize=15)
-            plt.savefig(output_directory + f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1}.png')
+            plt.savefig(output_directory + f'/Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1}.png')
     else:
         clusters_pred, clusters_obs= None, None
     
