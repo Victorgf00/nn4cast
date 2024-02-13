@@ -75,7 +75,11 @@ hyperparameters = {
 
     # Detrending: if you want to perform a detrending in the data
     'detrend_x': True, 
-    'detrend_y': True,  
+    'detrend_y': True,
+
+    # Overlapping: this is necessary if there is data for 0 and 360
+    'overlapping_x': False, 
+    'overlapping_y': False,
 
     # Filtering: select True if passing a filter to isolate some signals,
     # with the cut_off frequency and the type of filter desired ('low' or 'high')
