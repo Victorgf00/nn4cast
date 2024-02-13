@@ -35,7 +35,7 @@ hyperparameters = {
     'years_finally': np.arange(1950, 2019+1, 1), 
     'jump_year': 0, #this is necesary when the predictor and predictand has different years for each sample (default=0)
 
-    # Reference period: period for computing the mean and standard deviation
+    # Reference period: period for computing the mean and standard deviation (using the years of the predictor)
     'reference_period': [1950, 2000], 
 
     # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
@@ -73,11 +73,7 @@ hyperparameters = {
     'scale_x': 1, 
     'scale_y': 100, 
 
-    # Overlapping: this is necessary if there is data for 0 and 360
-    'overlapping_x': False, 
-    'overlapping_y': False, 
-
-    # Detrending:
+    # Detrending: if you want to perform a detrending in the data
     'detrend_x': True, 
     'detrend_y': True,  
 
