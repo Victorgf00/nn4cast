@@ -90,9 +90,6 @@ hyperparameters = {
     'filter_type_x': 'high',
     'filter_type_y': 'high',
 
-    # 1 Output: if there is only 1 output_point
-    '1output': False, 
-
     # Nans policy: define how to deal with nans, either delete them or substitute to 0,
     # when deleting, it flattens the array
     'replace_nans_with_0_predictor': False, 
