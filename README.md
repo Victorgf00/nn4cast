@@ -1,5 +1,5 @@
 # NN4CAST
- Repository containing the nn4cast library and some necessary tools to work with it
+ Repository containing the nn4cast library and some necessary tools to work with it. It is designed to work with .nc data with coordinates: time, latitude and longitude
 
 ## Installation
 **WARNING**: The environment must be compatible with all the dependencies, and it has been tested with python 3.9.16, future versions could be compatible with newer versions of python and other packages 
@@ -139,7 +139,7 @@ predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= h
 
 ### III. Evaluation of some results
 ```python
-Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=15, predictions=predicted_global, observations=observed_global, years_to_plot=[1945,2016])
+Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=1e9, predictions=predicted_global, observations=observed_global, years_to_plot=[1955,2016], plot_with_contours=True)
 pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r', save_plots=True)
 ```
 
