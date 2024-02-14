@@ -1373,7 +1373,7 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     return predicted_value, correct_value
 
 
-def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None):
+def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, plot_with_contours=False):
     evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
             dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
     evaluations_toolkit_output= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
@@ -1383,38 +1383,74 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         plotting_years= years_to_plot
     else:
         plotting_years= np.arange(hyperparameters['years_finally'][0],hyperparameters['years_finally'][-1]+1,1)
-        
+    
+    output_directory = os.path.join(hyperparameters['outputs_path'], 'individual_predictions')
+    os.makedirs(output_directory, exist_ok=True)
     for i in plotting_years:
-            fig = plt.figure(figsize=(10,4), constrained_layout=True)
-            # Specify the relative subplot widths
-            width_ratios = [4, 1]
-            gs = gridspec.GridSpec(1, 2, width_ratios=width_ratios)
+        fig = plt.figure(figsize=(15,5))
+        data_output_pred, data_output_obs= predictions.sel(time=i+hyperparameters['jump_year']), observations.sel(year=i+hyperparameters['jump_year'])
+        
+        if plot_with_contours==True:
             ax = fig.add_subplot(121, projection=ccrs.PlateCarree(central_longitude=-180))
-            data_input= dictionary_preprocess['input']['anomaly'].sel(year=i)
-            im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x, rang_x/10), 'RdBu_r','Anomalies [$ºC$]', 'Pred', ax, pixel_style=False, plot_colorbar=False)
-            ax.set_title(f"{hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
-
-            cbar = plt.colorbar(im, extend='neither', spacing='proportional',
-                            orientation='horizontal', shrink=0.8, format="%2.1f")
-            cbar.set_label(f'{hyperparameters["units_x"]}', size=10)
-            cbar.ax.tick_params(labelsize=10)
-
-            ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree(central_longitude=0))
-            data_output_pred, data_output_obs= predictions.sel(time=i+hyperparameters['jump_year']), observations.sel(year=i+hyperparameters['jump_year'])
-            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r','Anomalies [$hPa$]', 'Pred', ax2, pixel_style=False, plot_colorbar=False)
+            ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree())
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
             im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/10),extend='both',transform=ccrs.PlateCarree())
             ax2.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
+            ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}. Pred=colours and Obs=lines",fontsize=10)
+
+        else:
+            ax = fig.add_subplot(131, projection=ccrs.PlateCarree(central_longitude=-180))
+            ax2 = fig.add_subplot(132, projection=ccrs.PlateCarree())
+            ax3 = fig.add_subplot(133, projection=ccrs.PlateCarree())
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
+            im3= evaluations_toolkit_output.plotter(np.array(data_output_obs), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax3, pixel_style=False, plot_colorbar=False)
+            ax2.set_title(f"Predictions for {hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
+            ax3.set_title(f"Observations for {hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
+            if rang_y>100:
+                cbar3 = plt.colorbar(im3, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%1.1f")
+                tick_values = cbar3.get_ticks() 
+                cbar3.set_ticks(tick_values)
+                tick_labels = [f'{val/rang_y:.1f}' for val in tick_values]
+                cbar3.ax.set_xticklabels(tick_labels)
+                cbar3.set_label(f'*{rang_y:1.1e} {hyperparameters["units_y"]}', size=10)
+            else:
+                cbar3 = plt.colorbar(im3, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%2.1f")
+                cbar3.set_label(f'{hyperparameters["units_y"]}', size=10)
+                
+            cbar3.ax.tick_params(labelsize=10)
             
-            ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
-            cbar = plt.colorbar(im2, extend='neither', spacing='proportional',
-                            orientation='horizontal', shrink=0.7, format="%2.1f")
-            cbar.set_label(f'{hyperparameters["units_y"]}', size=10)
-            cbar.ax.tick_params(labelsize=10)
+        data_input= dictionary_preprocess['input']['anomaly'].sel(year=i)
+        im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x, rang_x/10), 'RdBu_r',f'Anomalies {hyperparameters["units_x"]}', '', ax, pixel_style=False, plot_colorbar=False)
+        ax.set_title(f"{hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
+
+        if rang_x>100:
+            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%1.1f")
+            tick_values = cbar1.get_ticks() 
+            cbar1.set_ticks(tick_values)
+            tick_labels = [f'{val/rang_x:.1f}' for val in tick_values]
+            cbar1.ax.set_xticklabels(tick_labels)
+            cbar1.set_label(f'*{rang_x:1.1e} {hyperparameters["units_x"]}', size=10)
+        else:
+            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%2.1f")
+            cbar1.set_label(f'{hyperparameters["units_x"]}', size=10)
+
+        if rang_y>100:
+            cbar2 = plt.colorbar(im2, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%1.1f")
+            tick_values = cbar2.get_ticks() 
+            cbar2.set_ticks(tick_values)
+            tick_labels = [f'{val/rang_y:.1f}' for val in tick_values]
+            cbar2.ax.set_xticklabels(tick_labels)
+            cbar2.set_label(f'*{rang_y:1.1e} {hyperparameters["units_y"]}', size=10)
             
-            output_directory = os.path.join(hyperparameters['outputs_path'], 'individual_predictions')
-            os.makedirs(output_directory, exist_ok=True)
-            plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
-            plt.show()
+        else:
+            cbar2 = plt.colorbar(im2, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%2.1f")
+            cbar2.set_label(f'{hyperparameters["units_y"]}', size=10)
+
+        cbar1.ax.tick_params(labelsize=10)        
+        cbar2.ax.tick_params(labelsize=10)
+        
+        plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
+    return
             
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
     if 'year' not in observation.coords:
