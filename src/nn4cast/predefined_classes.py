@@ -187,25 +187,20 @@ class ClimateDataPreprocessing:
                 
         if self.signal_filtering:
             print(f'Filtering {self.variable_name} data...')
-            def filter_analysis(data, cut_off, order=10, filter_type='high'):
+            def filter_analysis(data, cut_off, order=4, filter_type='high'):
                 def filter_func(x):
                     # Find indices of non-NaN values
-                    valid_indices = ~np.isnan(x)
+                    N= x.size
+                    x = np.append(np.flip(x), [x, np.flip(x)]) #this is necessary to tackle the problem of the extremes when applying the filter
                     
-                    # If all values are NaN, return NaN array
-                    if not np.any(valid_indices):
-                        return np.full_like(x, np.nan)
-
                     # Perform filtering only on non-NaN values
                     fs = 1 # Sampling frequency
                     fc = 2 * 1 / cut_off
                     b, a = signal.butter(order, fc / (fs / 2), filter_type)
-                    filtered_signal = signal.filtfilt(b, a, x[valid_indices])
+                    filtered_signal = signal.filtfilt(b, a, x)
+                    filtered_signal = filtered_signal[N:2*N]
                     
-                    # Replace NaN values with NaN in the filtered array
-                    filtered_array = np.full_like(x, np.nan)
-                    filtered_array[valid_indices] = filtered_signal
-                    return filtered_array
+                    return filtered_signal
 
                 # Apply the filter along the first dimension
                 filtered_data = xr.apply_ufunc(
@@ -383,9 +378,7 @@ class NeuralNetworkModel:
 
     """
 
-    def __init__(self, input_shape, output_shape, layer_sizes, activations, dropout_rates=None, kernel_regularizer=None, num_conv_layers=0, num_filters=32, pool_size=2, kernel_size=3,
-                 use_batch_norm=False, use_initializer=False, use_dropout=False, use_initial_skip_connections=False, use_intermediate_skip_connections=False, one_output=False,
-                 learning_rate=0.001, epochs=100, random_seed=42):
+    def __init__(self, input_shape, output_shape, layer_sizes, activations, dropout_rates=None, kernel_regularizer=None, num_conv_layers=0, num_filters=32, pool_size=2, kernel_size=3,use_batch_norm=False, use_initializer=False, use_dropout=False, use_initial_skip_connections=False, use_intermediate_skip_connections=False, one_output=False,learning_rate=0.001, epochs=100, random_seed=42):
         """
         Initialize the NeuralNetworkModel class with the specified parameters.
 
@@ -1452,211 +1445,3 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
     return
             
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
-    if 'year' not in observation.coords:
-        observation = observation.rename({'time': 'year'})
-    if 'year' not in prediction.coords:
-        prediction = prediction.rename({'time': 'year'})
-
-    def quitonans(mat):
-            out = mat[:,~np.isnan(mat.mean(axis = 0))]
-            return out
-
-    def pongonans(matred,mat):
-        out = mat.mean(axis = 0 )
-        #out= np.array(mat)
-        out[:] = np.nan
-        #out[~np.isnan(np.array(mat))] = matred
-        out[~np.isnan(mat.mean(axis = 0))] = matred
-        return out
-        return out
-    
-    def eofs(data, n_modes):
-        nt, nlat, nlon= data.shape
-        map_orig= data[:,:,:]
-        map_reshape= np.reshape(np.array(map_orig),(nt, nlat*nlon))
-        lon, lat= data.longitude, data.latitude
-        years= data.year
-
-        data= np.reshape(np.array(data), (nt, nlat*nlon))
-        data_sin_nan= quitonans(data)
-        pca = PCA(n_components=n_modes, whiten=True)
-        pca.fit(data_sin_nan)
-        print('Explained variance ratio:', pca.explained_variance_ratio_[0:n_modes])
-        eofs= pca.components_[0:n_modes]
-        pcs= np.dot(eofs,np.transpose(data_sin_nan))
-        pcs= (pcs-np.mean(pcs,axis=0))/np.std(pcs, axis=0)
-        eofs_reg= np.dot(pcs,data_sin_nan)/(nt-1)
-        return eofs_reg, map_reshape, lat, lon, nlat, nlon, years, pca.explained_variance_ratio_[0:n_modes], pcs
-
-    def clustering(n_clusters, pcs,eofs, n_modes):
-        pc_pred= np.array(pcs)
-
-        # Apply K-means clustering to the principal components
-        kmeans_pred = KMeans(n_clusters=n_clusters).fit(pcs)
-
-        # Get cluster labels
-        cluster_labels_pred = kmeans_pred.labels_
-
-        cluster_centers = pd.DataFrame(
-            kmeans_pred.cluster_centers_, 
-            columns=[f'eof{i}' for i in np.arange(1,n_modes+1)]
-            )
-
-        cluster_center_array = xr.DataArray(
-            cluster_centers.values, 
-            coords=[np.arange(1, n_clusters+1), np.arange(1, n_modes+1) ], 
-            dims=['centroids', 'mode'])
-
-        nm, nlat, nlon= eofs.shape
-        eofs_reshaped= np.reshape(eofs, (nm, nlat*nlon))
-        clusters_reshaped= np.dot(np.array(cluster_center_array),eofs_reshaped)
-        clusters= np.reshape(clusters_reshaped, (n_clusters, nlat, nlon))
-
-        unique_values, counts = np.unique(np.array(cluster_labels_pred), return_counts=True)
-        percentages= (counts / len(np.array(cluster_labels_pred))) * 100
-        
-        # Sort clusters based on percentages
-        sorted_indices = np.argsort(percentages)[::-1]
-        sorted_clusters = np.array([clusters[i] for i in sorted_indices])
-        sorted_percentages = np.array([percentages[i] for i in sorted_indices])
-        return sorted_clusters, sorted_percentages
-
-    eofs_reg_pred, map_reshape_pred, lat_pred, lon_pred, nlat_pred, nlon_pred, years, explained_variance_pred, pcs_pred= eofs(prediction,n_modes)
-    eofs_reg_obs, map_reshape_obs, lat_obs, lon_obs, nlat_obs, nlon_obs, years, explained_variance_obs, pcs_obs= eofs(observation,n_modes)
-    eofs_pred_list, eofs_obs_list= [], []
-
-    for i in range(0,n_modes):
-        eof_pred= pongonans(eofs_reg_pred[i,:],np.array(map_reshape_pred))
-        eof_pred= np.reshape(eof_pred, (nlat_pred, nlon_pred))
-        eofs_pred_list.append(eof_pred)
-        eof_obs= pongonans(eofs_reg_obs[i,:],np.array(map_reshape_obs))
-        eof_obs= np.reshape(eof_obs, (nlat_obs, nlon_obs))
-        eofs_obs_list.append(eof_obs)
-        
-        # Create a new figure
-        plt.style.use('default')
-        fig = plt.figure(figsize=(20, 3))
-        # Subplot 1: Spatial Correlation Map
-        ax = fig.add_subplot(141, projection=ccrs.PlateCarree())
-        rango = max((abs(np.nanmin(np.array(eof_pred))),abs(np.nanmax(np.array(eof_pred)))))
-        num_levels = 20
-        levels = np.linspace(-rango, rango, num_levels)
-        # Create a pixel-based colormap plot on the given axis
-        im = ax.contourf(lon_pred, lat_pred, eof_pred, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-        ax.coastlines(linewidth=0.75)
-        cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-        cbar.ax.tick_params(labelsize=7)
-        cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
-        gl = ax.gridlines(draw_labels=True)
-        gl.xlines = False
-        gl.ylines = False
-        gl.top_labels = False  # Disable top latitude labels
-        gl.right_labels = False  # Disable right longitude labels
-
-        ax = fig.add_subplot(142)
-        ax.plot(np.array(years),pcs_pred[i,:])
-        ax.grid()
-        
-        ax = fig.add_subplot(143, projection=ccrs.PlateCarree())
-        rango = max((abs(np.nanmin(np.array(eof_obs))),abs(np.nanmax(np.array(eof_obs)))))
-        num_levels = 20
-        levels = np.linspace(-rango, rango, num_levels)
-        # Create a pixel-based colormap plot on the given axis
-        im = ax.contourf(lon_obs, lat_obs, eof_obs, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-        ax.coastlines(linewidth=0.75)
-        cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-        cbar.ax.tick_params(labelsize=7)
-        cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
-        gl = ax.gridlines(draw_labels=True)
-        gl.xlines = False
-        gl.ylines = False
-        gl.top_labels = False  # Disable top latitude labels
-        gl.right_labels = False  # Disable right longitude labels
-
-        ax = fig.add_subplot(144)
-        ax.plot(np.array(years),pcs_obs[i,:])
-        ax.grid()
-        fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
-        if save_plots==True:
-            output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
-            os.makedirs(output_directory, exist_ok=True)
-            plt.savefig(output_directory + f'/EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
-    
-    #we pass the pcs to xarray dataset
-    pcs_pred = xr.DataArray(
-        data=np.transpose(pcs_pred),
-        dims=["time","pc"],
-        coords=dict(pc=np.arange(1,n_modes+1),
-            time=np.array(years)))
-
-    pcs_obs = xr.DataArray(
-        data=np.transpose(pcs_obs),
-        dims=["time","pc"],
-        coords=dict(pc=np.arange(1,n_modes+1),
-            time=np.array(years)))
-    
-    eofs_pred = xr.DataArray(
-        data=np.array(eofs_pred_list),
-        dims=["pc","latitude","longitude"],
-        coords=dict(pc=np.arange(1,n_modes+1),
-            latitude=np.array(observation.latitude), longitude=np.array(prediction.longitude)))
-
-    eofs_obs = xr.DataArray(
-        data=np.array(eofs_obs_list),
-        dims=["pc","latitude","longitude"],
-        coords=dict(pc=np.arange(1,n_modes+1),
-            latitude=np.array(observation.latitude), longitude=np.array(prediction.longitude)))
-    
-    if n_clusters>0:
-        clusters_pred, percent_pred = clustering(n_clusters, np.array(pcs_pred), np.array(eofs_pred_list), n_modes)
-        clusters_obs, percent_obs = clustering(n_clusters, np.array(pcs_obs), np.array(eofs_obs_list), n_modes)
-
-        for i in range(0,n_clusters):
-            # Create a new figure
-            plt.style.use('default')
-            fig = plt.figure(figsize=(20, 3))
-            # Subplot 1: Spatial Correlation Map
-            ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
-            rango1 = max((abs(np.nanmin(np.array(clusters_pred))),abs(np.nanmax(np.array(clusters_pred)))))
-            rango2 = max((abs(np.nanmin(np.array(clusters_obs))),abs(np.nanmax(np.array(clusters_obs)))))
-            rango = max(rango1, rango2)
-            num_levels = 20
-            levels = np.linspace(-rango, rango, num_levels)
-            # Create a pixel-based colormap plot on the given axis
-            im = ax.contourf(lon_pred, lat_pred, clusters_pred[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-            ax.coastlines(linewidth=0.75)
-            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-            cbar.ax.tick_params(labelsize=7)
-            cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
-            gl = ax.gridlines(draw_labels=True)
-            gl.xlines = False
-            gl.ylines = False
-            gl.top_labels = False  # Disable top latitude labels
-            gl.right_labels = False  # Disable right longitude labels
-            
-            ax = fig.add_subplot(122, projection=ccrs.PlateCarree())
-            num_levels = 20
-            levels = np.linspace(-rango, rango, num_levels)
-            # Create a pixel-based colormap plot on the given axis
-            im = ax.contourf(lon_pred, lat_pred, clusters_obs[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
-            ax.coastlines(linewidth=0.75)
-            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
-            cbar.ax.tick_params(labelsize=7)
-            cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
-            gl = ax.gridlines(draw_labels=True)
-            gl.xlines = False
-            gl.ylines = False
-            gl.top_labels = False  # Disable top latitude labels
-            gl.right_labels = False  # Disable right longitude labels
-            fig.suptitle(f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1} with occurrence predicted: {percent_pred[i]:.2f} % and observed: {percent_obs[i]:.2f} % ', fontsize=15)
-            plt.savefig(output_directory + f'/Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1}.png')
-    else:
-        clusters_pred, clusters_obs= None, None
-    
-    if save_plots==True:
-        datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
-        # Save each dataset to a NetCDF file in the 'data_outputs' folder
-        for i, ds in enumerate(datasets, start=1):
-            ds.to_netcdf(os.path.join(output_directory, names[i-1]))
-            
-    return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
