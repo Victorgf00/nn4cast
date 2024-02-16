@@ -55,7 +55,7 @@ hyperparameters = {
     'name_x': 'sst',
     'name_y': 'msl',
 
-    # Months and months to skip
+    # Months and months to skip, knowing that January=1 and December=12
     'months_x': [10],
     'months_skip_x': ['None'],
     'months_y': [11, 12],
