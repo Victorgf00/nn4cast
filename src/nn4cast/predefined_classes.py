@@ -15,6 +15,7 @@ import numpy.ma as ma
 from scipy.stats import pearsonr
 import matplotlib.dates as mdates
 import matplotlib.colors as colors
+from matplotlib.colors import from_levels_and_colors
 from cartopy.util import add_cyclic_point 
 import xskillscore as xs
 import time
@@ -28,6 +29,7 @@ import yaml
 import matplotlib.gridspec as gridspec
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+import math
 
 #The following two lines are coded to avoid the warning unharmful message.
 import warnings
@@ -37,7 +39,6 @@ import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import load_model
 plt.style.use('seaborn-v0_8')
-
 
 
 class ClimateDataPreprocessing:
@@ -599,7 +600,7 @@ class ClimateDataEvaluation:
         self.jump_year = jump_year
         self.map_nans = map_nans
 
-    def plotter(self, data, levs, cmap1, l1, titulo, ax, pixel_style=False, plot_colorbar=True):
+    def plotter(self, data, levs, cmap1, l1, titulo, ax, pixel_style=False, plot_colorbar=True, acc_norm=None):
         """
         Create a filled contour map using Cartopy.
 
@@ -620,6 +621,8 @@ class ClimateDataEvaluation:
             # Create a BoundaryNorm object
             cmap1 = plt.cm.get_cmap(cmap1)
             norm = colors.BoundaryNorm(levs, ncolors=cmap1.N, clip=True)
+            if acc_norm:
+                norm = acc_norm
             # Create a pixel-based colormap plot on the given axis
             im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm)
         else:
@@ -642,6 +645,9 @@ class ClimateDataEvaluation:
             cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='vertical', shrink=0.7, format="%2.1f")
             cbar.set_label(l1, size=15)
             cbar.ax.tick_params(labelsize=15)
+            if acc_norm:
+                cbar.set_ticks(ticks=levs, labels=levs)
+
         return im
     
     def prediction_vs_observation1D(self, outputs_path):
@@ -806,7 +812,13 @@ class ClimateDataEvaluation:
         ax = fig.add_subplot(221, projection=ccrs.PlateCarree(0))
         data = spatial_correlation
         rango = 1
-        ClimateDataEvaluation.plotter(self, data, np.linspace(-rango, +rango, 11), 'RdBu_r','Correlation', 'Spatial Correlation', ax, pixel_style=True)
+        acc_clevs = [-1,-0.9,-0.8,-0.7,-0.6,-0.4,-0.2,0.2,0.4,0.6,0.7,0.8,0.9,1]
+        # 4 valores mas
+        colors = np.array([[0,0,255],[0,102,201],[119,153,255],[119,187,255],[170,221,255], [170,255,255],[170,170,170], [255,255,0],
+                        [255,204,0], [255,170,0],[255,119,0],[255,0,0],[119,0,34]], np.float32) / 255.0
+
+        acc_map, acc_norm = from_levels_and_colors(acc_clevs, colors)
+        ClimateDataEvaluation.plotter(self, data, acc_clevs, acc_map,'Correlation', 'Spatial Correlation', ax, pixel_style=True,acc_norm=acc_norm)
         lon_sig, lat_sig = spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').longitude, \
                         spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').latitude
         ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
@@ -929,7 +941,12 @@ class ClimateDataEvaluation:
         predictions_member = predicted_global
         correct_value = correct_value.rename({'year': 'time'})
         spatial_correlation_global = xr.corr(predicted_global, correct_value, dim='time')
+        acc_clevs = [-1,-0.9,-0.8,-0.7,-0.6,-0.4,-0.2,0.2,0.4,0.6,0.7,0.8,0.9,1]
+        colors = np.array([[0,0,255],[0,102,201],[119,153,255],[119,187,255],[170,221,255], [170,255,255],[170,170,170], [255,255,0],
+                        [255,204,0], [255,170,0],[255,119,0],[255,0,0],[119,0,34]], np.float32) / 255.0
 
+        acc_map, acc_norm = from_levels_and_colors(acc_clevs, colors)
+        
         for i in range(0,n_folds):
             if i < len(axes):  # Only proceed if there are available subplots
                 predictions_loop = predictions_member.sel(time=slice(years[0]+i*time_range,years[time_range-1]+i*time_range))
@@ -940,11 +957,11 @@ class ClimateDataEvaluation:
                 rango=1
                 if plot_differences==True:
                     data_member = spatial_correlation_member-spatial_correlation_global
-                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
 
                 else:
                     data_member = spatial_correlation_member
-                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='RdBu_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
     
 
                 if i==n_folds-1:
@@ -952,20 +969,23 @@ class ClimateDataEvaluation:
                     # Plot the correlation map
                     ax = axes[i+1]
                     data_member = spatial_correlation_global
-                    im2= ClimateDataEvaluation.plotter(self, data=data_member,levs=np.linspace(-rango, +rango, 11), cmap1='RdBu_r', l1='Correlation', titulo='ACC Global', ax=ax, plot_colorbar=False)
+                    im2= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='ACC Global', ax=ax, plot_colorbar=False,acc_norm=acc_norm)
 
         # Add a common colorbar for all subplots
         if plot_differences==True:
             cbar_ax = fig.add_axes([0.92, 0.35, 0.02, 0.5])  # Adjust the position for your preference
             cbar = fig.colorbar(im, cax=cbar_ax, orientation='vertical', label='Correlation difference: ACC_member-ACC_global', format="%2.1f")
+            cbar.set_ticks(ticks=acc_clevs, labels=acc_clevs)
 
             cbar_ax = fig.add_axes([0.92, 0.025, 0.02, 0.3])  # Adjust the position for your preference
             cbar = fig.colorbar(im2, cax=cbar_ax, orientation='vertical', label='Correlation', format="%2.1f")
-        
+            cbar.set_ticks(ticks=acc_clevs, labels=acc_clevs)
+
         else: 
             cbar_ax = fig.add_axes([0.92, 0.025, 0.02, 0.8])  # Adjust the position for your preference
             cbar = fig.colorbar(im2, cax=cbar_ax, orientation='vertical', label='Correlation', format="%2.1f")
-            
+            cbar.set_ticks(ticks=acc_clevs, labels=acc_clevs)
+
         # Add a common title for the entire figure
         fig.suptitle(f'Correlations for predicting each time period of {var_y} months "{months_y}" \n with months "{months_x}" of {var_x} from {predictor_region}',fontsize=18)
 
@@ -1444,4 +1464,214 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
     return
             
+           
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
+    if 'year' not in observation.coords:
+        observation = observation.rename({'time': 'year'})
+    if 'year' not in prediction.coords:
+        prediction = prediction.rename({'time': 'year'})
+
+    def quitonans(mat):
+            out = mat[:,~np.isnan(mat.mean(axis = 0))]
+            return out
+
+    def pongonans(matred,mat):
+        out = mat.mean(axis = 0 )
+        #out= np.array(mat)
+        out[:] = np.nan
+        #out[~np.isnan(np.array(mat))] = matred
+        out[~np.isnan(mat.mean(axis = 0))] = matred
+        return out
+        return out
+    
+    def eofs(data, n_modes):
+        nt, nlat, nlon= data.shape
+        map_orig= data[:,:,:]
+        map_reshape= np.reshape(np.array(map_orig),(nt, nlat*nlon))
+        lon, lat= data.longitude, data.latitude
+        years= data.year
+
+        data= np.reshape(np.array(data), (nt, nlat*nlon))
+        data_sin_nan= quitonans(data)
+        pca = PCA(n_components=n_modes, whiten=True)
+        pca.fit(data_sin_nan)
+        print('Explained variance ratio:', pca.explained_variance_ratio_[0:n_modes])
+        eofs= pca.components_[0:n_modes]
+        pcs= np.dot(eofs,np.transpose(data_sin_nan))
+        pcs= (pcs-np.mean(pcs,axis=0))/np.std(pcs, axis=0)
+        eofs_reg= np.dot(pcs,data_sin_nan)/(nt-1)
+        return eofs_reg, map_reshape, lat, lon, nlat, nlon, years, pca.explained_variance_ratio_[0:n_modes], pcs
+
+    def clustering(n_clusters, pcs,eofs, n_modes):
+        pc_pred= np.array(pcs)
+
+        # Apply K-means clustering to the principal components
+        kmeans_pred = KMeans(n_clusters=n_clusters).fit(pcs)
+
+        # Get cluster labels
+        cluster_labels_pred = kmeans_pred.labels_
+
+        cluster_centers = pd.DataFrame(
+            kmeans_pred.cluster_centers_, 
+            columns=[f'eof{i}' for i in np.arange(1,n_modes+1)]
+            )
+
+        cluster_center_array = xr.DataArray(
+            cluster_centers.values, 
+            coords=[np.arange(1, n_clusters+1), np.arange(1, n_modes+1) ], 
+            dims=['centroids', 'mode'])
+
+        nm, nlat, nlon= eofs.shape
+        eofs_reshaped= np.reshape(eofs, (nm, nlat*nlon))
+        clusters_reshaped= np.dot(np.array(cluster_center_array),eofs_reshaped)
+        clusters= np.reshape(clusters_reshaped, (n_clusters, nlat, nlon))
+
+        unique_values, counts = np.unique(np.array(cluster_labels_pred), return_counts=True)
+        percentages= (counts / len(np.array(cluster_labels_pred))) * 100
+        
+        # Sort clusters based on percentages
+        sorted_indices = np.argsort(percentages)[::-1]
+        sorted_clusters = np.array([clusters[i] for i in sorted_indices])
+        sorted_percentages = np.array([percentages[i] for i in sorted_indices])
+        return sorted_clusters, sorted_percentages
+
+    eofs_reg_pred, map_reshape_pred, lat_pred, lon_pred, nlat_pred, nlon_pred, years, explained_variance_pred, pcs_pred= eofs(prediction,n_modes)
+    eofs_reg_obs, map_reshape_obs, lat_obs, lon_obs, nlat_obs, nlon_obs, years, explained_variance_obs, pcs_obs= eofs(observation,n_modes)
+    eofs_pred_list, eofs_obs_list= [], []
+
+    for i in range(0,n_modes):
+        eof_pred= pongonans(eofs_reg_pred[i,:],np.array(map_reshape_pred))
+        eof_pred= np.reshape(eof_pred, (nlat_pred, nlon_pred))
+        eofs_pred_list.append(eof_pred)
+        eof_obs= pongonans(eofs_reg_obs[i,:],np.array(map_reshape_obs))
+        eof_obs= np.reshape(eof_obs, (nlat_obs, nlon_obs))
+        eofs_obs_list.append(eof_obs)
+        
+        # Create a new figure
+        plt.style.use('default')
+        fig = plt.figure(figsize=(20, 3))
+        # Subplot 1: Spatial Correlation Map
+        ax = fig.add_subplot(141, projection=ccrs.PlateCarree())
+        rango = max((abs(np.nanmin(np.array(eof_pred))),abs(np.nanmax(np.array(eof_pred)))))
+        num_levels = 20
+        levels = np.linspace(-rango, rango, num_levels)
+        # Create a pixel-based colormap plot on the given axis
+        im = ax.contourf(lon_pred, lat_pred, eof_pred, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+        ax.coastlines(linewidth=0.75)
+        cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+        cbar.ax.tick_params(labelsize=7)
+        cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
+        gl = ax.gridlines(draw_labels=True)
+        gl.xlines = False
+        gl.ylines = False
+        gl.top_labels = False  # Disable top latitude labels
+        gl.right_labels = False  # Disable right longitude labels
+
+        ax = fig.add_subplot(142)
+        ax.plot(np.array(years),pcs_pred[i,:])
+        ax.grid()
+        
+        ax = fig.add_subplot(143, projection=ccrs.PlateCarree())
+        rango = max((abs(np.nanmin(np.array(eof_obs))),abs(np.nanmax(np.array(eof_obs)))))
+        num_levels = 20
+        levels = np.linspace(-rango, rango, num_levels)
+        # Create a pixel-based colormap plot on the given axis
+        im = ax.contourf(lon_obs, lat_obs, eof_obs, cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+        ax.coastlines(linewidth=0.75)
+        cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+        cbar.ax.tick_params(labelsize=7)
+        cbar.set_label(f'{hyperparameters["units_y"]}/std', size=15)
+        gl = ax.gridlines(draw_labels=True)
+        gl.xlines = False
+        gl.ylines = False
+        gl.top_labels = False  # Disable top latitude labels
+        gl.right_labels = False  # Disable right longitude labels
+
+        ax = fig.add_subplot(144)
+        ax.plot(np.array(years),pcs_obs[i,:])
+        ax.grid()
+        fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
+        if save_plots==True:
+            output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
+            os.makedirs(output_directory, exist_ok=True)
+            plt.savefig(output_directory + f'/EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
+    
+    #we pass the pcs to xarray dataset
+    pcs_pred = xr.DataArray(
+        data=np.transpose(pcs_pred),
+        dims=["time","pc"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            time=np.array(years)))
+
+    pcs_obs = xr.DataArray(
+        data=np.transpose(pcs_obs),
+        dims=["time","pc"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            time=np.array(years)))
+    
+    eofs_pred = xr.DataArray(
+        data=np.array(eofs_pred_list),
+        dims=["pc","latitude","longitude"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            latitude=np.array(observation.latitude), longitude=np.array(prediction.longitude)))
+
+    eofs_obs = xr.DataArray(
+        data=np.array(eofs_obs_list),
+        dims=["pc","latitude","longitude"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            latitude=np.array(observation.latitude), longitude=np.array(prediction.longitude)))
+    
+    if n_clusters>0:
+        clusters_pred, percent_pred = clustering(n_clusters, np.array(pcs_pred), np.array(eofs_pred_list), n_modes)
+        clusters_obs, percent_obs = clustering(n_clusters, np.array(pcs_obs), np.array(eofs_obs_list), n_modes)
+
+        for i in range(0,n_clusters):
+            # Create a new figure
+            plt.style.use('default')
+            fig = plt.figure(figsize=(20, 3))
+            # Subplot 1: Spatial Correlation Map
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
+            rango1 = max((abs(np.nanmin(np.array(clusters_pred))),abs(np.nanmax(np.array(clusters_pred)))))
+            rango2 = max((abs(np.nanmin(np.array(clusters_obs))),abs(np.nanmax(np.array(clusters_obs)))))
+            rango = max(rango1, rango2)
+            num_levels = 20
+            levels = np.linspace(-rango, rango, num_levels)
+            # Create a pixel-based colormap plot on the given axis
+            im = ax.contourf(lon_pred, lat_pred, clusters_pred[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+            ax.coastlines(linewidth=0.75)
+            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+            cbar.ax.tick_params(labelsize=7)
+            cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
+            gl = ax.gridlines(draw_labels=True)
+            gl.xlines = False
+            gl.ylines = False
+            gl.top_labels = False  # Disable top latitude labels
+            gl.right_labels = False  # Disable right longitude labels
+            
+            ax = fig.add_subplot(122, projection=ccrs.PlateCarree())
+            num_levels = 20
+            levels = np.linspace(-rango, rango, num_levels)
+            # Create a pixel-based colormap plot on the given axis
+            im = ax.contourf(lon_pred, lat_pred, clusters_obs[i,:,:], cmap=cmap, transform=ccrs.PlateCarree(), levels=levels)  # 'norm' defines custom levels
+            ax.coastlines(linewidth=0.75)
+            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='horizontal', shrink=0.9, format="%2.1f")
+            cbar.ax.tick_params(labelsize=7)
+            cbar.set_label(f'{hyperparameters["units_y"]}', size=15)
+            gl = ax.gridlines(draw_labels=True)
+            gl.xlines = False
+            gl.ylines = False
+            gl.top_labels = False  # Disable top latitude labels
+            gl.right_labels = False  # Disable right longitude labels
+            fig.suptitle(f'Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1} with occurrence predicted: {percent_pred[i]:.2f} % and observed: {percent_obs[i]:.2f} % ', fontsize=15)
+            plt.savefig(output_directory + f'/Weather regimes for {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}" for cluster {i+1}.png')
+    else:
+        clusters_pred, clusters_obs= None, None
+    
+    if save_plots==True:
+        datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
+        # Save each dataset to a NetCDF file in the 'data_outputs' folder
+        for i, ds in enumerate(datasets, start=1):
+            ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+            
+    return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
+    
