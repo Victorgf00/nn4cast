@@ -489,9 +489,11 @@ class NeuralNetworkModel:
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         if outputs_path:
             if best_model==True:
-                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
             else:
-                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
 
         return model
 
@@ -1370,7 +1372,6 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     print(f'Training done (Time taken: {time_taken:.2f} seconds)')
     return predicted_value, correct_value
 
-
 def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, plot_with_contours=False):
     evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
             dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
@@ -1389,7 +1390,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         data_output_pred, data_output_obs= predictions.sel(time=i+hyperparameters['jump_year']), observations.sel(year=i+hyperparameters['jump_year'])
         
         if plot_with_contours==True:
-            ax = fig.add_subplot(121, projection=ccrs.PlateCarree(central_longitude=-180))
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
             ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree())
             im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
             im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/10),extend='both',transform=ccrs.PlateCarree())
@@ -1397,7 +1398,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}. Pred=colours and Obs=lines",fontsize=10)
 
         else:
-            ax = fig.add_subplot(131, projection=ccrs.PlateCarree(central_longitude=-180))
+            ax = fig.add_subplot(131, projection=ccrs.PlateCarree())
             ax2 = fig.add_subplot(132, projection=ccrs.PlateCarree())
             ax3 = fig.add_subplot(133, projection=ccrs.PlateCarree())
             im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
@@ -1580,6 +1581,7 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
             output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
             os.makedirs(output_directory, exist_ok=True)
             plt.savefig(output_directory + f'/EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
+    
     #we pass the pcs to xarray dataset
     pcs_pred = xr.DataArray(
         data=np.transpose(pcs_pred),
@@ -1592,6 +1594,18 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
         dims=["time","pc"],
         coords=dict(pc=np.arange(1,n_modes+1),
             time=np.array(years)))
+    
+    eofs_pred = xr.DataArray(
+        data=np.array(eofs_pred_list),
+        dims=["pc","latitude","longitude"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            latitude=np.array(observation.latitude), longitude=np.array(prediction.longitude)))
+
+    eofs_obs = xr.DataArray(
+        data=np.array(eofs_obs_list),
+        dims=["pc","latitude","longitude"],
+        coords=dict(pc=np.arange(1,n_modes+1),
+            latitude=np.array(observation.latitude), longitude=np.array(prediction.longitude)))
     
     if n_clusters>0:
         clusters_pred, percent_pred = clustering(n_clusters, np.array(pcs_pred), np.array(eofs_pred_list), n_modes)
@@ -1639,4 +1653,10 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
     else:
         clusters_pred, clusters_obs= None, None
     
+    if save_plots==True:
+        datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
+        # Save each dataset to a NetCDF file in the 'data_outputs' folder
+        for i, ds in enumerate(datasets, start=1):
+            ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+            
     return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
