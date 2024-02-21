@@ -15,6 +15,10 @@ To get the latest version:
     (<your-env-name>) $ conda install pydot graphviz
 ```
 
+To update to the latest version:
+```console
+    (<your-env-name>) $ pip install --upgrade git+https://github.com/Victorgf00/nn4cast
+```
 ## Example usage: predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
 ### I. Import the functions and define the hyperparameters as a dictionary
 ```python
