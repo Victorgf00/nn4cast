@@ -44,7 +44,7 @@ hyperparameters = {
     'validation_years': [1990, 1999],
     'testing_years': [2000, 2019],
 
-    # Input and output limits: for latitude first the northernmost, for longitude either -
+    # Input and output limits: for latitude you can put in any order, for longitude either -
     # -180-(+180) or 0-360, putting first the smaller number
     'lat_lims_x': [55, -20],
     'lon_lims_x': [120, 280],
