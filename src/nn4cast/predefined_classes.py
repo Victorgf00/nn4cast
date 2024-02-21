@@ -126,7 +126,10 @@ class ClimateDataPreprocessing:
         else:
             data = data.assign_coords(longitude=(((data.longitude + 180) % 360) - 180)).sortby('longitude')
 
-        data = data.sel(latitude=slice(self.lat_lims[0], self.lat_lims[1]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
+        if self.lat_lims[0] > self.lat_lims[1]:
+            data = data.sel(latitude=slice(self.lat_lims[1], self.lat_lims[0]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
+        else:
+            data = data.sel(latitude=slice(self.lat_lims[0], self.lat_lims[1]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
 
         if self.regrid_degree!=0:
             lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1]+self.regrid_degree, self.regrid_degree)
@@ -626,7 +629,7 @@ class ClimateDataEvaluation:
             # Create a pixel-based colormap plot on the given axis
             im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm)
         else:
-            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='both', transform=ccrs.PlateCarree())
+            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='neither', transform=ccrs.PlateCarree())
 
         # Add coastlines to the plot
         ax.coastlines(linewidth=0.75)
@@ -929,7 +932,7 @@ class ClimateDataEvaluation:
 
         # Create a list of ensemble members
         years= np.arange(self.time_lims[0], self.time_lims[-1]+1,1)
-        time_range = int((len(years)/n_folds))
+        time_range = int(np.round((len(years)/n_folds), decimals=0))
 
         # Calculate correlation for each ensemble member
         fig, axes = plt.subplots(nrows=(n_folds // 3 + 1), ncols=3, figsize=(20, 10),
@@ -949,7 +952,11 @@ class ClimateDataEvaluation:
         
         for i in range(0,n_folds):
             if i < len(axes):  # Only proceed if there are available subplots
-                predictions_loop = predictions_member.sel(time=slice(years[0]+i*time_range,years[time_range-1]+i*time_range))
+                years_fold= [years[0]+i*time_range,years[time_range-1]+i*time_range]
+                if years_fold[1]>years[-1]:
+                    years_fold[1]=years[-1]
+                    
+                predictions_loop = predictions_member.sel(time=slice(years_fold[0],years_fold[1]))
                 spatial_correlation_member = xr.corr(predictions_loop, correct_value, dim='time')
 
                 # Plot the correlation map
@@ -957,11 +964,11 @@ class ClimateDataEvaluation:
                 rango=1
                 if plot_differences==True:
                     data_member = spatial_correlation_member-spatial_correlation_global
-                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False)
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold[0])+'-'+str(years_fold[1]), ax=ax, plot_colorbar=False)
 
                 else:
                     data_member = spatial_correlation_member
-                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years[0]+i*time_range)+'-'+str(years[time_range-1]+i*time_range), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold[0])+'-'+str(years_fold[1]), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
     
 
                 if i==n_folds-1:
@@ -1464,7 +1471,6 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
     return
             
-           
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
     if 'year' not in observation.coords:
         observation = observation.rename({'time': 'year'})
@@ -1674,4 +1680,3 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
             ds.to_netcdf(os.path.join(output_directory, names[i-1]))
             
     return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
-    
