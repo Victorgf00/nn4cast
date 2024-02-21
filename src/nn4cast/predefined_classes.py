@@ -126,7 +126,7 @@ class ClimateDataPreprocessing:
         else:
             data = data.assign_coords(longitude=(((data.longitude + 180) % 360) - 180)).sortby('longitude')
 
-        if self.lat_lims[0] > self.lat_lims[1]:
+        if self.lat_lims[0] < self.lat_lims[1]:
             data = data.sel(latitude=slice(self.lat_lims[1], self.lat_lims[0]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
         else:
             data = data.sel(latitude=slice(self.lat_lims[0], self.lat_lims[1]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
@@ -891,6 +891,7 @@ class ClimateDataEvaluation:
         predicted_list = []
         correct_value_list = []
         years = np.arange(self.time_lims[0], self.time_lims[-1]+1,1)
+        years_division_list = []
         # Loop over the folds
         for i, (train_index, testing_index) in enumerate(kf.split(self.X)):
             print(f'Fold {i+1}/{n_folds}')
@@ -908,13 +909,14 @@ class ClimateDataEvaluation:
             predicted_value,observed_value= ClimateDataEvaluation.evaluation(self, X_test_other=X_testing_fold, Y_test_other=Y_testing_fold, model_other=model_cv, years_other=[(years[testing_index])[0],(years[testing_index])[-1]])
             predicted_list.append(predicted_value)
             correct_value_list.append(observed_value)
-
+            years_division_list.append(years[testing_index])
+            
         # concatenate all the predicted values in the list into one global dataarray
         predicted_global = xr.concat(predicted_list, dim='time')
         correct_value = xr.concat(correct_value_list, dim='year')
-        return predicted_global,correct_value
+        return predicted_global,correct_value,years_division_list
 
-    def correlations_pannel(self, n_folds, predicted_global, correct_value, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False, plot_differences=False):
+    def correlations_pannel(self, n_folds, predicted_global, correct_value, years_division, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False, plot_differences=False):
         """
         Visualize correlations for each ensemble member in a panel plot.
 
@@ -932,7 +934,6 @@ class ClimateDataEvaluation:
 
         # Create a list of ensemble members
         years= np.arange(self.time_lims[0], self.time_lims[-1]+1,1)
-        time_range = int(np.round((len(years)/n_folds), decimals=0))
 
         # Calculate correlation for each ensemble member
         fig, axes = plt.subplots(nrows=(n_folds // 3 + 1), ncols=3, figsize=(20, 10),
@@ -952,11 +953,11 @@ class ClimateDataEvaluation:
         
         for i in range(0,n_folds):
             if i < len(axes):  # Only proceed if there are available subplots
-                years_fold= [years[0]+i*time_range,years[time_range-1]+i*time_range]
-                if years_fold[1]>years[-1]:
-                    years_fold[1]=years[-1]
-                    
-                predictions_loop = predictions_member.sel(time=slice(years_fold[0],years_fold[1]))
+                years_fold_div= years_division[i]
+                
+                print(years_fold_div)
+
+                predictions_loop = predictions_member.sel(time=slice(years_fold_div[0],years_fold_div[-1]))
                 spatial_correlation_member = xr.corr(predictions_loop, correct_value, dim='time')
 
                 # Plot the correlation map
@@ -964,11 +965,11 @@ class ClimateDataEvaluation:
                 rango=1
                 if plot_differences==True:
                     data_member = spatial_correlation_member-spatial_correlation_global
-                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold[0])+'-'+str(years_fold[1]), ax=ax, plot_colorbar=False)
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold_div[0])+'-'+str(years_fold_div[-1]), ax=ax, plot_colorbar=False)
 
                 else:
                     data_member = spatial_correlation_member
-                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold[0])+'-'+str(years_fold[1]), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
+                    im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold_div[0])+'-'+str(years_fold_div[-1]), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
     
 
                 if i==n_folds-1:
@@ -1378,10 +1379,10 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
             ds.to_netcdf(os.path.join(output_directory, names[i-1]))
 
     else:
-        predicted_value,correct_value= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
+        predicted_value,correct_value,years_division_list= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
         predicted_value.to_netcdf()
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
-        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False, plot_differences=plot_differences)
+        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,years_division=years_division_list,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False, plot_differences=plot_differences)
         datasets, names = [predicted_value, correct_value], ['predicted_global_cv', 'observed_global_cv']
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
