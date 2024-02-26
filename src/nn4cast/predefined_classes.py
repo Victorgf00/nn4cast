@@ -40,7 +40,6 @@ import tensorflow.keras as keras
 from tensorflow.keras.models import load_model
 plt.style.use('seaborn-v0_8')
 
-
 class ClimateDataPreprocessing:
     """
     Class for performing data preprocessing and manipulation on climate data.
@@ -133,7 +132,11 @@ class ClimateDataPreprocessing:
 
         if self.regrid_degree!=0:
             lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1]+self.regrid_degree, self.regrid_degree)
-            lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1]-self.regrid_degree, -self.regrid_degree)
+            if self.lat_lims[0] < self.lat_lims[1]:
+                lat_regrid = np.arange(self.lat_lims[1], self.lat_lims[0]-self.regrid_degree, -self.regrid_degree)
+            else:
+                lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1]-self.regrid_degree, -self.regrid_degree)
+
             data = data.interp(longitude=np.array(lon_regrid), method='nearest').interp(latitude=np.array(lat_regrid), method='nearest')
         
         latitude = data.latitude
@@ -486,11 +489,11 @@ class NeuralNetworkModel:
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         if outputs_path:
             if best_model==True:
-                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
-                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
+                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
             else:
-                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
-                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
+                fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
+                #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
 
         return model
 
@@ -620,16 +623,18 @@ class ClimateDataEvaluation:
             fig (matplotlib.figure.Figure): Matplotlib figure.
         """
         # Create a filled contour plot on the given axis
+        # Create a BoundaryNorm object
+        cmap1 = plt.cm.get_cmap(cmap1)
+        norm = colors.BoundaryNorm(levs, ncolors=cmap1.N, clip=True)
+        if acc_norm:
+            norm = acc_norm
+            
         if pixel_style==True:
-            # Create a BoundaryNorm object
-            cmap1 = plt.cm.get_cmap(cmap1)
-            norm = colors.BoundaryNorm(levs, ncolors=cmap1.N, clip=True)
-            if acc_norm:
-                norm = acc_norm
             # Create a pixel-based colormap plot on the given axis
             im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm)
         else:
-            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='neither', transform=ccrs.PlateCarree())
+            
+            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='neither', transform=ccrs.PlateCarree(), norm=norm)
 
         # Add coastlines to the plot
         ax.coastlines(linewidth=0.75)
@@ -645,9 +650,9 @@ class ClimateDataEvaluation:
         
         if plot_colorbar==True:
             # Create a colorbar for the plot
-            cbar = plt.colorbar(im, extend='neither', spacing='proportional', orientation='vertical', shrink=0.7, format="%2.1f")
+            cbar = plt.colorbar(im, extend='neither', orientation='vertical', shrink=0.9, format="%2.1f")
             cbar.set_label(l1, size=15)
-            cbar.ax.tick_params(labelsize=15)
+            cbar.ax.tick_params(labelsize=12)
             if acc_norm:
                 cbar.set_ticks(ticks=levs, labels=levs)
 
@@ -955,8 +960,6 @@ class ClimateDataEvaluation:
             if i < len(axes):  # Only proceed if there are available subplots
                 years_fold_div= years_division[i]
                 
-                print(years_fold_div)
-
                 predictions_loop = predictions_member.sel(time=slice(years_fold_div[0],years_fold_div[-1]))
                 spatial_correlation_member = xr.corr(predictions_loop, correct_value, dim='time')
 
@@ -1279,14 +1282,14 @@ class BestModelAnalysis:
             print('Now evalutating the best model on the test set')
             evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_value,observed_value= evaluations_toolkit_bm.evaluation()
-            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
+            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=False)
             return predicted_value, observed_value, fig1
         else:
             print('Now evalutating the best model via Cross Validation')
             evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
-            predicted_global,correct_value= evaluations_toolkit_bm.cross_validation(n_folds=n_cv_folds, model_class=neural_network_bm)
+            predicted_global,correct_value,years_division_list= evaluations_toolkit_bm.cross_validation(n_folds=n_cv_folds, model_class=neural_network_bm)
             fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
-            fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, predictor_region=predictor_region,var_x=var_x, var_y=var_y, best_model=True)
+            fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,years_division=years_division_list,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, predictor_region=predictor_region,var_x=var_x, var_y=var_y, best_model=True)
             return predicted_global, correct_value, fig2, fig3
 
 def Dictionary_saver(dictionary):
@@ -1337,17 +1340,21 @@ def Preprocess(dictionary_hyperparams):
     return preprocessing_results
 
 def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
+    output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'best_model/')
+
     bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], dictionary_hyperparams['outputs_path'], dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
+        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], output_directory, dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
     tuner = bm_class.tuner_searcher(max_trials=max_trials)
 
     predicted_value, observed_value, fig1= bm_class.bm_evaluation(tuner, cross_validation=False, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
     predicted_global, observed_global, fig2, fig3= bm_class.bm_evaluation(tuner, n_cv_folds=n_cv_folds, cross_validation=True, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
     datasets, names = [predicted_value, observed_value, predicted_global,observed_global], ['predicted_test_period_bm', 'observed_test_period_bm','predicted_global_cv_bm', 'observed_global_cv_bm']
-    output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
     os.makedirs(output_directory, exist_ok=True)
     best_model = tuner.get_best_models(num_models=1)[0]
-    best_model.save(output_directory+'/best_model.h5')  # Save the model in HDF5 format
+    best_model.save(output_directory+'best_model.h5')  # Save the model in HDF5 format
+    # Save the hyperparameters
+    with open(os.path.join(output_directory, 'hyperparameters_bm.txt'), 'w') as f:
+        f.write(str(tuner.get_best_hyperparameters()[0].values))
     # Save each dataset to a NetCDF file in the 'data_outputs' folder
     for i, ds in enumerate(datasets, start=1):
         ds.to_netcdf(os.path.join(output_directory, names[i-1]))
@@ -1419,7 +1426,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}. Pred=colours and Obs=lines",fontsize=10)
 
         else:
-            ax = fig.add_subplot(131, projection=ccrs.PlateCarree())
+            ax = fig.add_subplot(131, projection=ccrs.PlateCarree(central_longitude=-180))
             ax2 = fig.add_subplot(132, projection=ccrs.PlateCarree())
             ax3 = fig.add_subplot(133, projection=ccrs.PlateCarree())
             im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
@@ -1472,7 +1479,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
     return
             
-def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r', save_plots=False):
+def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r'):
     if 'year' not in observation.coords:
         observation = observation.rename({'time': 'year'})
     if 'year' not in prediction.coords:
@@ -1598,10 +1605,9 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
         ax.plot(np.array(years),pcs_obs[i,:])
         ax.grid()
         fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
-        if save_plots==True:
-            output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
-            os.makedirs(output_directory, exist_ok=True)
-            plt.savefig(output_directory + f'/EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
+        output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
+        os.makedirs(output_directory, exist_ok=True)
+        plt.savefig(output_directory + f'/EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1}.png')
     
     #we pass the pcs to xarray dataset
     pcs_pred = xr.DataArray(
@@ -1674,10 +1680,10 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
     else:
         clusters_pred, clusters_obs= None, None
     
-    if save_plots==True:
-        datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
-        # Save each dataset to a NetCDF file in the 'data_outputs' folder
-        for i, ds in enumerate(datasets, start=1):
-            ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+
+    datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
+    # Save each dataset to a NetCDF file in the 'data_outputs' folder
+    for i, ds in enumerate(datasets, start=1):
+        ds.to_netcdf(os.path.join(output_directory, names[i-1]))
             
     return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
