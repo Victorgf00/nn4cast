@@ -1282,13 +1282,13 @@ class BestModelAnalysis:
             print('Now evalutating the best model on the test set')
             evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_value,observed_value= evaluations_toolkit_bm.evaluation()
-            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=False)
+            fig1= evaluations_toolkit_bm.correlations(predicted_value,observed_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
             return predicted_value, observed_value, fig1
         else:
             print('Now evalutating the best model via Cross Validation')
             evaluations_toolkit_bm= ClimateDataEvaluation(self.X, self.X_train, self.X_test, self.Y, self.Y_train, self.Y_test, self.lon_y, self.lat_y, self.std_y, model_bm, self.time_lims, self.train_years, self.testing_years, self.output_original, jump_year=self.jump_year)
             predicted_global,correct_value,years_division_list= evaluations_toolkit_bm.cross_validation(n_folds=n_cv_folds, model_class=neural_network_bm)
-            fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=False)
+            fig2= evaluations_toolkit_bm.correlations(predicted_global,correct_value,self.outputs_path, threshold=threshold, units=units, months_x=months_x, months_y=months_y, var_x=var_x, var_y=var_y, predictor_region=predictor_region, best_model=True)
             fig3= evaluations_toolkit_bm.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_global, correct_value=correct_value,years_division=years_division_list,outputs_path= self.outputs_path, months_x=months_x, months_y=months_y, predictor_region=predictor_region,var_x=var_x, var_y=var_y, best_model=True)
             return predicted_global, correct_value, fig2, fig3
 
