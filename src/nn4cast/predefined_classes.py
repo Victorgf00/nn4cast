@@ -137,7 +137,7 @@ class ClimateDataPreprocessing:
             else:
                 lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1]-self.regrid_degree, -self.regrid_degree)
 
-            data = data.interp(longitude=np.array(lon_regrid), method='nearest').interp(latitude=np.array(lat_regrid), method='nearest')
+            data = data.interp(longitude=np.array(lon_regrid), method='linear').interp(latitude=np.array(lat_regrid), method='linear')
         
         latitude = data.latitude
         longitude = data.longitude
