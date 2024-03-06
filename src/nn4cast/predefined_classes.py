@@ -1348,7 +1348,8 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
 
     predicted_value, observed_value, fig1= bm_class.bm_evaluation(tuner, cross_validation=False, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
     predicted_global, observed_global, fig2, fig3= bm_class.bm_evaluation(tuner, n_cv_folds=n_cv_folds, cross_validation=True, threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],)
-    datasets, names = [predicted_value, observed_value, predicted_global,observed_global], ['predicted_test_period_bm', 'observed_test_period_bm','predicted_global_cv_bm', 'observed_global_cv_bm']
+    datasets, names = [predicted_value, observed_value, predicted_global,observed_global], ['predicted_test_period_bm.nc', 'observed_test_period_bm.nc','predicted_global_cv_bm.nc', 'observed_global_cv_bm.nc']
+    variable_names = ['predicted_value', 'observed_value', 'predicted_global', 'observed_global']
     os.makedirs(output_directory, exist_ok=True)
     best_model = tuner.get_best_models(num_models=1)[0]
     best_model.save(output_directory+'best_model.h5')  # Save the model in HDF5 format
@@ -1357,7 +1358,7 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
         f.write(str(tuner.get_best_hyperparameters()[0].values))
     # Save each dataset to a NetCDF file in the 'data_outputs' folder
     for i, ds in enumerate(datasets, start=1):
-        ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+        ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
     return fig1, fig2, fig3, predicted_global, observed_global
     
 def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_validation=False, n_cv_folds=0, plot_differences=False):
@@ -1374,26 +1375,27 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     
     output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
     os.makedirs(output_directory, exist_ok=True)
-    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies'))
+    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies.nc'), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': 'predictor_anomalies'}})
     
     if cross_validation==False:
         neural_network.performance_plot(record)
         predicted_value,correct_value= evaluations_toolkit.evaluation()
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path=dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
-        datasets, names = [predicted_value, correct_value], ['predicted_test_period', 'observed_test_period']
+        datasets, names = [predicted_value, correct_value], ['predicted_test_period.nc', 'observed_test_period.nc']
+        variable_names = ['predicted_value', 'observed_value']
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
-            ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+            ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
 
     else:
         predicted_value,correct_value,years_division_list= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
-        predicted_value.to_netcdf()
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
         fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,years_division=years_division_list,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False, plot_differences=plot_differences)
-        datasets, names = [predicted_value, correct_value], ['predicted_global_cv', 'observed_global_cv']
+        datasets, names = [predicted_value, correct_value], ['predicted_global_cv.nc', 'observed_global_cv.nc']
+        variable_names = ['predicted_global', 'observed_global']
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
-            ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+            ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
 
     end_time = time.time()
     time_taken = end_time - start_time
@@ -1681,9 +1683,10 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
         clusters_pred, clusters_obs= None, None
     
 
-    datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
+    datasets, names = [pcs_pred, pcs_obs, eofs_pred, eofs_obs], ['pcs_predicted.nc', 'pcs_observed.nc', 'eofs_pred.nc', 'eofs_obs.nc']
+    variable_names =  ['pcs_predicted', 'pcs_observed', 'eofs_pred', 'eofs_obs']
     # Save each dataset to a NetCDF file in the 'data_outputs' folder
     for i, ds in enumerate(datasets, start=1):
-        ds.to_netcdf(os.path.join(output_directory, names[i-1]))
+        ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
             
     return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
