@@ -826,7 +826,7 @@ class ClimateDataEvaluation:
                         [255,204,0], [255,170,0],[255,119,0],[255,0,0],[119,0,34]], np.float32) / 255.0
 
         acc_map, acc_norm = from_levels_and_colors(acc_clevs, colors)
-        ClimateDataEvaluation.plotter(self, data, acc_clevs, acc_map,'Correlation', 'Spatial Correlation', ax, pixel_style=True,acc_norm=acc_norm)
+        ClimateDataEvaluation.plotter(self, data, acc_clevs, acc_map,'Correlation', 'Correlation Map', ax, pixel_style=True,acc_norm=acc_norm)
         lon_sig, lat_sig = spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').longitude, \
                         spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').latitude
         ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
@@ -843,7 +843,7 @@ class ClimateDataEvaluation:
             ax1.bar(df.index, df[col], width=width, color=color_dict[col], label=col)
 
         ax1.set_ylim(ymin=-1, ymax=+1)
-        ax1.set_title('Temporal Correlation', fontsize=18)
+        ax1.set_title('Time Series of Correlation', fontsize=18)
         ax1.legend(loc='upper right')
 
         # Subplot 3: Spatial RMSE Map
@@ -851,7 +851,7 @@ class ClimateDataEvaluation:
         ax4 = fig.add_subplot(223, projection=ccrs.PlateCarree(0))
         data = spatial_rmse
         rango= int(np.nanmax(np.array(data)))
-        ClimateDataEvaluation.plotter(self, data, np.linspace(0, rango+1, 10), 'OrRd','RMSE', 'Spatial RMSE', ax4, pixel_style=True)
+        ClimateDataEvaluation.plotter(self, data, np.linspace(0, rango+1, 10), 'OrRd','RMSE', 'RMSE Map', ax4, pixel_style=True)
         
         plt.style.use('seaborn')
         # Subplot 4: Temporal RMSE Plot
@@ -863,7 +863,7 @@ class ClimateDataEvaluation:
         for i, col in enumerate(df.columns):
             ax5.bar(df.index, df[col], width=width, color=color_dict[col], label=col)
 
-        ax5.set_title('Temporal RMSE', fontsize=18)
+        ax5.set_title('Time Series of RMSE', fontsize=18)
         ax5.legend(loc='upper right')
         ax5.set_ylabel(f'{units}')
         fig.suptitle(f'Comparison of metrics of {var_y} from months "{months_y}"  when predicting with {predictor_region} {var_x} from months "{months_x}"', fontsize=20)
