@@ -59,7 +59,6 @@ class ClimateDataPreprocessing:
         months (list): List of months to select.
         months_to_drop (list): List of months to drop, default is 'None'
         years_out (list): List of output years.
-        reference_period (list): Reference period for normalization [start_year, end_year].
         detrend (bool, optional): Detrend the data using linear regression. Default is False.
         one_output (bool, optional): Return one output for each year. Default is False.
         mean_seasonal_method(bool): Decides how to compute the seasonal aggregates. True if mean, False if sum (default True)
@@ -240,60 +239,19 @@ class DataSplitter:
         Y_valid = self.predictant.sel(year=slice(self.validation_years[0] + self.jump_year, self.validation_years[1] + self.jump_year))
         Y_test = self.predictant.sel(year=slice(self.testing_years[0] + self.jump_year, self.testing_years[1] + self.jump_year))
 
-        '''
-        # if our data has NaNs, we must remove it to avoid problems when training the model
-        def quitonans(mat, reference):
-            out = mat[:, ~np.isnan(reference.mean(axis=0))]
-            return out
-
-        if self.replace_nans_with_0_predictor:
-        '''
         predictor = self.predictor.fillna(value=0)
         X = predictor.where(np.isfinite(predictor), 0)
         X_train = X.sel(year=slice(self.train_years[0], self.train_years[1]))
         X_valid = X.sel(year=slice(self.validation_years[0], self.validation_years[1]))
         X_test = X.sel(year=slice(self.testing_years[0], self.testing_years[1]))
-        '''
-        else:
-            nt, nlat, nlon = self.predictor.shape
-            nt_train, nlat, nlon = X_train.shape
-            nt_valid, nlat, nlon = X_valid.shape
-            nt_test, nlat, nlon = X_test.shape
 
-            X = np.reshape(np.array(self.predictor), (nt, nlat * nlon))
-            X_train_reshape = np.reshape(np.array(X_train), (nt_train, nlat * nlon))
-            X_valid_reshape = np.reshape(np.array(X_valid), (nt_valid, nlat * nlon))
-            X_test_reshape = np.reshape(np.array(X_test), (nt_test, nlat * nlon))
-            
-            X_train = quitonans(X_train_reshape, X)
-            X_valid = quitonans(X_valid_reshape, X)
-            X_test = quitonans(X_test_reshape, X)
-            X = quitonans(X, X)
-        if self.replace_nans_with_0_predictant:
-        '''    
         predictant = self.predictant.fillna(value=0)
         Y = predictant.where(np.isfinite(predictant), 0)
         Y = (Y.stack(space=('latitude','longitude'))).reset_index('space') #to convert the predictand to a (time, space) matrix
         Y_train = Y.sel(year=slice(self.train_years[0] + self.jump_year, self.train_years[1] + self.jump_year))
         Y_valid = Y.sel(year=slice(self.validation_years[0] + self.jump_year, self.validation_years[1] + self.jump_year))
         Y_test = Y.sel(year=slice(self.testing_years[0] + self.jump_year, self.testing_years[1] + self.jump_year))
-        '''
-        else:
-            nt, nlat, nlon = self.predictant.shape
-            nt_train, nlat, nlon = Y_train.shape
-            nt_valid, nlat, nlon = Y_valid.shape
-            nt_test, nlat, nlon = Y_test.shape
 
-            Y = np.reshape(np.array(self.predictant), (nt, nlat * nlon))
-            Y_train_reshape = np.reshape(np.array(Y_train), (nt_train, nlat * nlon))
-            Y_valid_reshape = np.reshape(np.array(Y_valid), (nt_valid, nlat * nlon))
-            Y_test_reshape = np.reshape(np.array(Y_test), (nt_test, nlat * nlon))
-            
-            Y_train = quitonans(Y_train_reshape, Y)
-            Y_valid = quitonans(Y_valid_reshape, Y)
-            Y_test = quitonans(Y_test_reshape, Y)
-            Y = quitonans(Y, Y)
-        '''
         input_shape,output_shape = X_train[0].shape, Y_train[0].shape
 
         if np.ndim(Y_train[0])==1:
@@ -1323,12 +1281,12 @@ def Preprocess(dictionary_hyperparams):
     data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],variable_name=dictionary_hyperparams['name_x'],
         months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'],detrend_window=dictionary_hyperparams['detrend_x_window'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'],train_years=dictionary_hyperparams['train_years'])
+        detrend=dictionary_hyperparams['detrend_x'],detrend_window=dictionary_hyperparams['detrend_x_window'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'],train_years=dictionary_hyperparams['train_years'])
     
     data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],variable_name=dictionary_hyperparams['name_y'],
         months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'],detrend_window=dictionary_hyperparams['detrend_y_window'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'],train_years=dictionary_hyperparams['train_years'])
+        detrend=dictionary_hyperparams['detrend_y'],detrend_window=dictionary_hyperparams['detrend_y_window'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'],train_years=dictionary_hyperparams['train_years'])
         
     # Preprocess data
     lat_x,lon_x, data_x, anom_x,norm_x,mean_x,std_x = data_mining_x.preprocess_data()
