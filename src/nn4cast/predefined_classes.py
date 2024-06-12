@@ -838,8 +838,9 @@ class ClimateDataEvaluation:
             mean_reference_x, mean_reference_y  = np.mean((self.X[train_index]), axis=0), np.mean((self.Y[train_index]), axis=0)
             std_reference_x, std_reference_y  = np.std((self.X[train_index]), axis=0), np.std((self.Y[train_index]), axis=0)
             X, Y = (self.X-mean_reference_x)/std_reference_x, (self.Y-mean_reference_y)/std_reference_y
-            X = X.fillna(value=0)
-            Y = Y.fillna(value=0)
+            X,Y = X.fillna(value=0), Y.fillna(value=0)
+            X,Y = X.where(np.isfinite(X), 0), Y.where(np.isfinite(Y), 0)
+            
             if np.ndim(Y)>2:
                 Y = (Y.stack(space=('latitude','longitude'))).reset_index('space') #to convert the predictand to a (time, space) matrix
 
