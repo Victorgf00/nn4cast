@@ -1394,7 +1394,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         data_output_pred, data_output_obs= predictions.sel(time=i+hyperparameters['jump_year']), observations.sel(year=i+hyperparameters['jump_year'])
         
         if plot_with_contours==True:
-            ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree(central_longitude=-180))
             ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree())
             im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
             im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/5),extend='both',transform=ccrs.PlateCarree())
