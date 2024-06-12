@@ -1377,7 +1377,7 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
         model_outputs = {'predictions': predicted_value,'observations':correct_value}
     return model_outputs
 
-def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, plot_with_contours=False, importances=None,region_importances=None):
+def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, plot_with_contours=False, importances=None,region_importances=None, rang_atr=None):
     evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
             dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
     evaluations_toolkit_output= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
@@ -1426,6 +1426,8 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         data_input= dictionary_preprocess['input']['anomaly'].sel(year=i)
         if importances is not None:
             rang_imp = np.max(np.abs(importances))/5
+            if rang_atr:
+                rang_imp = rang_atr
             im= evaluations_toolkit_input.plotter(np.array(importances.sel(time=i)), np.arange(-rang_imp, rang_imp, rang_imp/10), 'RdBu_r',f'Importances {hyperparameters["units_y"]}', '', ax, pixel_style=True, plot_colorbar=False, extend='both')
             im3= ax.contour(data_input.longitude,data_input.latitude,data_input,colors='black',levels=np.arange(-rang_x, rang_x, rang_x/5),extend='both',transform=ccrs.PlateCarree())
             ax.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
