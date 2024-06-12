@@ -10,3 +10,4 @@ tensorflow==2.7.0
 keras==2.7.0
 kerastuner==1.4.7
 scikit-learn==1.0.2
+alibi==0.7.0
