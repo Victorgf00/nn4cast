@@ -1431,7 +1431,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             ax.set_title(f"Importances and {hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
             rect = mpatches.Rectangle((region_importances[1][0], region_importances[0][1]), region_importances[1][1] - region_importances[1][0],region_importances[0][0] - region_importances[0][1], linewidth=2, edgecolor='green', facecolor='none',fill=True, transform=ccrs.PlateCarree(), label='Importances region')
             ax2.add_patch(rect)
-            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%1.1f")
+            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=1, format="%1.2f")
             cbar1.set_label(f'Importances {hyperparameters["units_y"]}', size=10)
 
         else:
