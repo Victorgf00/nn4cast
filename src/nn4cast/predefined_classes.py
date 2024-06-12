@@ -30,6 +30,9 @@ import matplotlib.gridspec as gridspec
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 import math
+import alibi
+import matplotlib.patches as mpatches  
+from alibi.explainers import IntegratedGradients
 
 #The following two lines are coded to avoid the warning unharmful message.
 import warnings
@@ -38,7 +41,6 @@ warnings.filterwarnings("ignore")
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import load_model
-plt.style.use('seaborn-v0_8')
 
 class ClimateDataPreprocessing:
     """
@@ -67,8 +69,8 @@ class ClimateDataPreprocessing:
     """
 
     def __init__(
-        self, relative_path, lat_lims, lon_lims, time_lims, scale=1,regrid_degree=1, overlapping=False, variable_name=None, rename=False, latitude_regrid=False,
-        months=None, months_to_drop=None, years_out=None, reference_period=None, detrend=False, one_output=False, jump_year=0, mean_seasonal_method=True, signal_filtering=False, cut_off=10, filter_type='high'):
+        self, relative_path, lat_lims, lon_lims, time_lims, scale=1,regrid_degree=1, variable_name=None, latitude_regrid=False,
+        months=None, months_to_drop=None, years_out=None, detrend=False, detrend_window=10, jump_year=0, mean_seasonal_method=True,train_years=None):
         """
         Initialize the ClimateDataProcessing class with the specified parameters.
 
@@ -81,21 +83,16 @@ class ClimateDataPreprocessing:
         self.time_lims = time_lims
         self.scale = scale
         self.regrid_degree = regrid_degree
-        self.overlapping = overlapping
         self.variable_name = variable_name
-        self.rename = rename
         self.latitude_regrid = latitude_regrid
         self.months = months
         self.months_to_drop = months_to_drop
         self.years_out = years_out
-        self.reference_period = reference_period
         self.detrend = detrend
-        self.one_output = one_output
+        self.detrend_window = detrend_window
         self.jump_year = jump_year
         self.mean_seasonal_method = mean_seasonal_method
-        self.signal_filtering = signal_filtering
-        self.cut_off = cut_off
-        self.filter_type = filter_type
+        self.train_years = train_years
         
     def preprocess_data(self):
         """
@@ -131,28 +128,21 @@ class ClimateDataPreprocessing:
             data = data.sel(latitude=slice(self.lat_lims[0], self.lat_lims[1]), longitude=slice(self.lon_lims[0], self.lon_lims[1]), time=slice(str(self.time_lims[0]), str(self.time_lims[1])))
 
         if self.regrid_degree!=0:
-            lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1]+self.regrid_degree, self.regrid_degree)
+            lon_regrid = np.arange(self.lon_lims[0], self.lon_lims[1], self.regrid_degree)
+            lon_regrid = lon_regrid[(lon_regrid >= self.lon_lims[0]) & (lon_regrid <= self.lon_lims[1])]
             if self.lat_lims[0] < self.lat_lims[1]:
                 lat_regrid = np.arange(self.lat_lims[1], self.lat_lims[0]-self.regrid_degree, -self.regrid_degree)
+                lat_regrid = lat_regrid[(lat_regrid >= self.lat_lims[1]) & (lat_regrid <= self.lat_lims[0])]
             else:
                 lat_regrid = np.arange(self.lat_lims[0], self.lat_lims[1]-self.regrid_degree, -self.regrid_degree)
-
+                lat_regrid = lat_regrid[(lat_regrid >= self.lat_lims[1]) & (lat_regrid <= self.lat_lims[0])]
+            
             data = data.interp(longitude=np.array(lon_regrid), method='linear').interp(latitude=np.array(lat_regrid), method='linear')
         
         latitude = data.latitude
         longitude = data.longitude
         data = data[str(self.variable_name)]
         
-        if self.overlapping:
-            creg, longitude = add_cyclic_point(np.array(data), coord=longitude)
-            data = xr.DataArray(
-                data=creg,
-                dims=["time", "latitude", "longitude"],
-                coords=dict(
-                    longitude=(["longitude"], np.array(longitude)),
-                    latitude=(["latitude"], np.array(latitude)),
-                    time=np.array(data.time)))
-
         data_red = data.sel(time=slice(f"{self.time_lims[0]}", f"{self.time_lims[-1]}"))
         data_red = data_red.sel(time=np.isin(data_red['time.month'], self.months))
 
@@ -168,69 +158,30 @@ class ClimateDataPreprocessing:
         if self.mean_seasonal_method==True:  
             mean_data /= len(self.months)
 
-        years_out= self.years_out +self.jump_year
+        years_out= self.years_out + self.jump_year
 
-        if self.one_output:
-            data_red = xr.DataArray(data=mean_data, dims=["year"], coords=dict(year=years_out))
-        else:
-            data_red = xr.DataArray(
-                data=mean_data, dims=["year", "latitude", "longitude"],
-                coords=dict(
-                    longitude=(["longitude"], np.array(data.longitude)),
-                    latitude=(["latitude"], np.array(data.latitude)), year=years_out
-                ))
+        data_red = xr.DataArray(
+            data=mean_data, dims=["year", "latitude", "longitude"],
+            coords=dict(
+                longitude=(["longitude"], np.array(data.longitude)),
+                latitude=(["latitude"], np.array(data.latitude)), year=years_out
+            ))
 
-        if self.detrend:
-            print(f'Detrending {self.variable_name} data...')
-            adjust = (data_red.polyfit(dim='year', deg=1)).sel(degree=1).polyfit_coefficients
-            time_step = np.arange(len(data_red['year']))
-            adjust_expanded = adjust.expand_dims(year=data_red['year'])
-
-            if self.one_output:
-                data_red = data_red - adjust_expanded * time_step
-            else:
-                time_step_expanded = np.expand_dims(time_step, axis=(1, 2))
-                data_red = data_red - adjust_expanded * time_step_expanded
-                
-        if self.signal_filtering:
-            print(f'Filtering {self.variable_name} data...')
-            def filter_analysis(data, cut_off, order=4, filter_type='high'):
-                def filter_func(x):
-                    # Find indices of non-NaN values
-                    N= x.size
-                    x = np.append(np.flip(x), [x, np.flip(x)]) #this is necessary to tackle the problem of the extremes when applying the filter
-                    
-                    # Perform filtering only on non-NaN values
-                    fs = 1 # Sampling frequency
-                    fc = 2 * 1 / cut_off
-                    b, a = signal.butter(order, fc / (fs / 2), filter_type)
-                    filtered_signal = signal.filtfilt(b, a, x)
-                    filtered_signal = filtered_signal[N:2*N]
-                    
-                    return filtered_signal
-
-                # Apply the filter along the first dimension
-                filtered_data = xr.apply_ufunc(
-                    filter_func,
-                    data,
-                    input_core_dims=[["year"]],
-                    output_core_dims=[["year"]],
-                    vectorize=True,
-                    dask="parallelized",
-                    output_dtypes=[float])
-                return filtered_data.transpose('year','latitude','longitude')
-            
-            data_red= filter_analysis(data_red, cut_off=self.cut_off, filter_type=self.filter_type)
-
-
-                
-        mean_reference = (data_red.sel(year=slice(str(self.reference_period[0]), str(self.reference_period[1])))).mean(dim='year')
-        std_reference = (data_red.sel(year=slice(str(self.reference_period[0]), str(self.reference_period[1])))).std(dim='year')
+        mean_reference = (data_red.sel(year=slice(str(self.train_years[0]+self.jump_year), str(self.train_years[1]+self.jump_year)))).mean(dim='year')
+        std_reference = (data_red.sel(year=slice(str(self.train_years[0]+self.jump_year), str(self.train_years[1]+self.jump_year)))).std(dim='year')
 
         anomaly = data_red - mean_reference
         normalization = anomaly / std_reference
-
-        return data, latitude, longitude, data_red, anomaly, normalization, mean_reference, std_reference
+        
+        if self.detrend:
+            print(f'Detrending {self.variable_name} data...')
+            # Compute the rolling mean (past events only)
+            rolling_mean = anomaly.rolling(year=self.detrend_window, center=False).mean()
+            anomaly[self.detrend_window:] = anomaly[self.detrend_window:] - rolling_mean[self.detrend_window:]
+            rolling_mean = normalization.rolling(year=self.detrend_window, center=False).mean()
+            normalization[self.detrend_window:] = normalization[self.detrend_window:] - rolling_mean[self.detrend_window:]
+            
+        return latitude, longitude, data_red, anomaly, normalization, mean_reference, std_reference
 
 class DataSplitter:
     """
@@ -251,7 +202,7 @@ class DataSplitter:
 
     """
 
-    def __init__(self, train_years, validation_years, testing_years, predictor, predictant, jump_year=0, replace_nans_with_0_predictor=False, replace_nans_with_0_predictant=False):
+    def __init__(self, train_years, validation_years, testing_years, predictor, predictant, jump_year=0):#, replace_nans_with_0_predictor=False, replace_nans_with_0_predictant=False):
         """
         Initialize the DataSplitter class with the specified parameters.
 
@@ -264,8 +215,8 @@ class DataSplitter:
         self.predictor = predictor
         self.predictant = predictant
         self.jump_year = jump_year
-        self.replace_nans_with_0_predictor = replace_nans_with_0_predictor
-        self.replace_nans_with_0_predictant = replace_nans_with_0_predictant
+        #self.replace_nans_with_0_predictor = replace_nans_with_0_predictor
+        #self.replace_nans_with_0_predictant = replace_nans_with_0_predictant
 
     def prepare_data(self):
         """
@@ -289,17 +240,20 @@ class DataSplitter:
         Y_valid = self.predictant.sel(year=slice(self.validation_years[0] + self.jump_year, self.validation_years[1] + self.jump_year))
         Y_test = self.predictant.sel(year=slice(self.testing_years[0] + self.jump_year, self.testing_years[1] + self.jump_year))
 
+        '''
         # if our data has NaNs, we must remove it to avoid problems when training the model
         def quitonans(mat, reference):
             out = mat[:, ~np.isnan(reference.mean(axis=0))]
             return out
 
         if self.replace_nans_with_0_predictor:
-            predictor = self.predictor.fillna(value=0)
-            X = predictor.where(np.isfinite(predictor), 0)
-            X_train = X.sel(year=slice(self.train_years[0], self.train_years[1]))
-            X_valid = X.sel(year=slice(self.validation_years[0], self.validation_years[1]))
-            X_test = X.sel(year=slice(self.testing_years[0], self.testing_years[1]))
+        '''
+        predictor = self.predictor.fillna(value=0)
+        X = predictor.where(np.isfinite(predictor), 0)
+        X_train = X.sel(year=slice(self.train_years[0], self.train_years[1]))
+        X_valid = X.sel(year=slice(self.validation_years[0], self.validation_years[1]))
+        X_test = X.sel(year=slice(self.testing_years[0], self.testing_years[1]))
+        '''
         else:
             nt, nlat, nlon = self.predictor.shape
             nt_train, nlat, nlon = X_train.shape
@@ -310,18 +264,20 @@ class DataSplitter:
             X_train_reshape = np.reshape(np.array(X_train), (nt_train, nlat * nlon))
             X_valid_reshape = np.reshape(np.array(X_valid), (nt_valid, nlat * nlon))
             X_test_reshape = np.reshape(np.array(X_test), (nt_test, nlat * nlon))
-
+            
             X_train = quitonans(X_train_reshape, X)
             X_valid = quitonans(X_valid_reshape, X)
             X_test = quitonans(X_test_reshape, X)
             X = quitonans(X, X)
-
         if self.replace_nans_with_0_predictant:
-            predictant = self.predictant.fillna(value=0)
-            Y = predictant.where(np.isfinite(predictant), 0)
-            Y_train = Y.sel(year=slice(self.train_years[0] + self.jump_year, self.train_years[1] + self.jump_year))
-            Y_valid = Y.sel(year=slice(self.validation_years[0] + self.jump_year, self.validation_years[1] + self.jump_year))
-            Y_test = Y.sel(year=slice(self.testing_years[0] + self.jump_year, self.testing_years[1] + self.jump_year))
+        '''    
+        predictant = self.predictant.fillna(value=0)
+        Y = predictant.where(np.isfinite(predictant), 0)
+        Y = (Y.stack(space=('latitude','longitude'))).reset_index('space') #to convert the predictand to a (time, space) matrix
+        Y_train = Y.sel(year=slice(self.train_years[0] + self.jump_year, self.train_years[1] + self.jump_year))
+        Y_valid = Y.sel(year=slice(self.validation_years[0] + self.jump_year, self.validation_years[1] + self.jump_year))
+        Y_test = Y.sel(year=slice(self.testing_years[0] + self.jump_year, self.testing_years[1] + self.jump_year))
+        '''
         else:
             nt, nlat, nlon = self.predictant.shape
             nt_train, nlat, nlon = Y_train.shape
@@ -332,12 +288,12 @@ class DataSplitter:
             Y_train_reshape = np.reshape(np.array(Y_train), (nt_train, nlat * nlon))
             Y_valid_reshape = np.reshape(np.array(Y_valid), (nt_valid, nlat * nlon))
             Y_test_reshape = np.reshape(np.array(Y_test), (nt_test, nlat * nlon))
-
+            
             Y_train = quitonans(Y_train_reshape, Y)
             Y_valid = quitonans(Y_valid_reshape, Y)
             Y_test = quitonans(Y_test_reshape, Y)
             Y = quitonans(Y, Y)
-
+        '''
         input_shape,output_shape = X_train[0].shape, Y_train[0].shape
 
         if np.ndim(Y_train[0])==1:
@@ -433,7 +389,7 @@ class NeuralNetworkModel:
         
         # Add convolutional layers with skip connections
         for i in range(self.num_conv_layers):
-            x = tf.keras.layers.Conv2D(filters=self.num_filters, kernel_size=(self.kernel_size, self.kernel_size), padding='same', kernel_initializer='he_normal', name=f"conv_layer_{i+1}")(x)
+            x = tf.keras.layers.Conv2D(filters=self.num_filters, kernel_size=(self.kernel_size, self.kernel_size), padding='same', kernel_initializer='he_normal', kernel_regularizer=tf.keras.regularizers.L2(l2=0.05), name=f"conv_layer_{i+1}")(x)
             if self.use_batch_norm:
                 x = tf.keras.layers.BatchNormalization(name=f"batch_norm_{i+1}")(x)
             x = tf.keras.layers.Activation('elu', name=f'activation_{i+1}')(x)
@@ -442,7 +398,13 @@ class NeuralNetworkModel:
 
         # Flatten the output
         x = tf.keras.layers.Flatten()(x)
-        
+        # Add dropout if applicable
+        if self.use_dropout:
+            x = tf.keras.layers.Dropout(self.dropout_rates[0], name=f"dropout_{1}")(x)
+        # Add the output layer
+        if self.kernel_regularizer is not "None":
+            x = tf.keras.layers.Dense(units=self.layer_sizes[0], activation='relu', kernel_regularizer=tf.keras.regularizers.L2(l2=0.01), kernel_initializer='he_normal', name="dense_wit_reg_"+str(self.kernel_regularizer))(x)
+
         # Add fully connected layers
         for i in range(len(self.layer_sizes) - 1):
             # Store the current layer as a skip connection
@@ -459,19 +421,18 @@ class NeuralNetworkModel:
             x = tf.keras.layers.Activation(self.activations[i], name=f'activation_{i+1+self.num_conv_layers}')(x)
             
             # Add dropout if applicable
-            if self.use_dropout and i < len(self.dropout_rates):
-                x = tf.keras.layers.Dropout(self.dropout_rates[i], name=f"dropout_{i+1}")(x)
+            #if self.use_dropout and i < len(self.dropout_rates):
+            #    x = tf.keras.layers.Dropout(self.dropout_rates[i], name=f"dropout_{i+1}")(x)
             
             # Merge with the skip connection if specified
             if self.use_intermediate_skip_connections:
                 skip_connection_last = skip_connections[-1]
                 skip_connection_last = tf.keras.layers.Dense(units=self.layer_sizes[i], kernel_initializer='he_normal', name=f"dense_skip_connect_{i+1}")(skip_connection_last)
                 x = tf.keras.layers.Add(name=f"merge_skip_connect_{i+1}")([x, skip_connection_last])
-
-        # Add the output layer
-        if self.kernel_regularizer is not "None":
-            x = tf.keras.layers.Dense(units=self.layer_sizes[-1], activation=self.activations[-1], kernel_regularizer=self.kernel_regularizer, kernel_initializer='he_normal', name="dense_wit_reg2_"+str(self.kernel_regularizer))(x)
         
+        if self.kernel_regularizer is not "None":
+            x = tf.keras.layers.Dense(units=self.layer_sizes[-1], activation='relu', kernel_regularizer=tf.keras.regularizers.L2(l2=0.01), kernel_initializer='he_normal', name="dense_wit_reg2_"+str(self.kernel_regularizer))(x)
+            
         if self.use_initial_skip_connections:
             skip_connection_first= tf.keras.layers.Flatten()(skip_connections[0])
             skip_connection_first = tf.keras.layers.Dense(units=self.layer_sizes[-1], kernel_initializer='he_normal', name=f"initial_skip_connect")(skip_connection_first)
@@ -583,10 +544,10 @@ class ClimateDataEvaluation:
         - correlations_pannel(): Visualize correlations for each ensemble member in a panel plot.
     """
     def __init__(
-        self, X, X_train, X_test, Y, Y_train, Y_test, lon_y, lat_y, std_y, model, time_lims, train_years, testing_years,map_nans, jump_year=0):
+        self, X, X_train, X_test, Y, Y_train, Y_test, lon_y, lat_y, std_y, model, time_lims, train_years, testing_years,map_nans, jump_year=0, detrend_x=False, detrend_x_window=10, detrend_y=False, detrend_y_window=10, importances=False, region_atributted=None):
         """
         Initialize the ClimateDataEvaluation class with the specified parameters.
-
+        
         Args:
             See class attributes for details.
         """
@@ -605,8 +566,14 @@ class ClimateDataEvaluation:
         self.testing_years = testing_years
         self.jump_year = jump_year
         self.map_nans = map_nans
+        self.detrend_x = detrend_x
+        self.detrend_x_window = detrend_x_window
+        self.detrend_y = detrend_y
+        self.detrend_y_window = detrend_y_window
+        self.importances = importances
+        self.region_atributted = region_atributted
 
-    def plotter(self, data, levs, cmap1, l1, titulo, ax, pixel_style=False, plot_colorbar=True, acc_norm=None):
+    def plotter(self, data, levs, cmap1, l1, titulo, ax, pixel_style=False, plot_colorbar=True, acc_norm=None, extend='neither'):
         """
         Create a filled contour map using Cartopy.
 
@@ -633,8 +600,7 @@ class ClimateDataEvaluation:
             # Create a pixel-based colormap plot on the given axis
             im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm)
         else:
-            
-            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend='neither', transform=ccrs.PlateCarree(), norm=norm)
+            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend=str(extend), transform=ccrs.PlateCarree(), norm=norm)
 
         # Add coastlines to the plot
         ax.coastlines(linewidth=0.75)
@@ -658,56 +624,6 @@ class ClimateDataEvaluation:
 
         return im
     
-    def prediction_vs_observation1D(self, outputs_path):
-        """
-        Plot the model's predictions vs. observations for both training and testing data.
-
-        Args:
-            outputs_path (str): Output path for saving the plot.
-
-        Returns:
-            None
-        """
-        # Calculate predictions and observations for training data
-        prediction_train, observation_train = (self.model.predict(self.X_train)) * np.array(self.std_y), self.Y_train * self.std_y
-
-        # Plot training data
-        plt.figure(figsize=(10, 6))
-        plt.plot(np.arange(self.train_years[0], self.train_years[1] + 1, 1), prediction_train, label='Prediction train')
-        plt.plot(np.arange(self.train_years[0], self.train_years[1] + 1, 1), observation_train, label='Observation train')
-
-        # Calculate correlation and RMSE for training data
-        correlation_train, rmse_train = np.corrcoef(prediction_train.ravel(), observation_train)[0, 1], np.sqrt(
-            np.mean((np.array(prediction_train).ravel() - np.array(observation_train)) ** 2))
-        
-        # Add correlation and RMSE text to the plot
-        plt.text(0.05, 0.9, f'Correlation train: {correlation_train:.2f}', transform=plt.gca().transAxes,
-                bbox=dict(facecolor='white', alpha=0.8))
-        plt.text(0.05, 0.85, f'RMSE train: {rmse_train:.2f}', transform=plt.gca().transAxes,
-                bbox=dict(facecolor='white', alpha=0.8))
-
-        # Calculate predictions and observations for testing data
-        prediction_test, observation_test = (self.model.predict(self.X_test)) * np.array(self.std_y), self.Y_test * self.std_y
-
-        # Plot testing data
-        plt.plot(np.arange(self.testing_years[0], self.testing_years[1], 1), prediction_test, label='Prediction test')
-        plt.plot(np.arange(self.testing_years[0], self.testing_years[1], 1), observation_test, label='Observation test')
-        plt.axvline(x=self.train_years[1], color='black')
-        plt.legend(loc='lower left')
-
-        # Calculate correlation and RMSE for testing data
-        correlation_test, rmse_test = np.corrcoef(prediction_test.ravel(), observation_test)[0, 1], np.sqrt(
-            np.mean((np.array(prediction_test).ravel() - np.array(observation_test)) ** 2))
-        
-        # Add correlation and RMSE text to the plot
-        plt.text(0.75, 0.9, f'Correlation test: {correlation_test:.2f}', transform=plt.gca().transAxes,
-                bbox=dict(facecolor='white', alpha=0.8))
-        plt.text(0.75, 0.85, f'RMSE test: {rmse_test:.2f}', transform=plt.gca().transAxes,
-                bbox=dict(facecolor='white', alpha=0.8))
-        
-        # Save the plot
-        plt.savefig(outputs_path + 'Comparacion_prediccion_observacion.png')
-
     def evaluation(self, X_test_other=None, Y_test_other=None, model_other=None, years_other=None):
         """
         Evaluate a trained model's predictions against test data.
@@ -813,7 +729,6 @@ class ClimateDataEvaluation:
         spatial_correlation_sig = spatial_correlation.where(sig_pixels)
 
         # Create a new figure
-        plt.style.use('default')
         fig = plt.figure(figsize=(15, 7))
 
         # Subplot 1: Spatial Correlation Map
@@ -826,13 +741,16 @@ class ClimateDataEvaluation:
                         [255,204,0], [255,170,0],[255,119,0],[255,0,0],[119,0,34]], np.float32) / 255.0
 
         acc_map, acc_norm = from_levels_and_colors(acc_clevs, colors)
-        ClimateDataEvaluation.plotter(self, data, acc_clevs, acc_map,'Correlation', 'Correlation Map', ax, pixel_style=True,acc_norm=acc_norm)
+        ClimateDataEvaluation.plotter(self, data, acc_clevs, acc_map,'Correlation', 'ACC map', ax, pixel_style=True,acc_norm=acc_norm)
         lon_sig, lat_sig = spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').longitude, \
                         spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').latitude
-        ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
+        
+        hatch_mask = p_value < threshold
+        ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
+
+        #ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
 
         # Subplot 2: Temporal Correlation Plot
-        plt.style.use('seaborn')
         ax1 = fig.add_subplot(222)
         data = {'time': temporal_correlation.time, 'Predictions correlation': temporal_correlation,}
         df = pd.DataFrame(data)
@@ -843,17 +761,15 @@ class ClimateDataEvaluation:
             ax1.bar(df.index, df[col], width=width, color=color_dict[col], label=col)
 
         ax1.set_ylim(ymin=-1, ymax=+1)
-        ax1.set_title('Time Series of Correlation', fontsize=18)
+        ax1.set_title('Time series of global ACC', fontsize=18)
         ax1.legend(loc='upper right')
 
         # Subplot 3: Spatial RMSE Map
-        plt.style.use('default')
         ax4 = fig.add_subplot(223, projection=ccrs.PlateCarree(0))
         data = spatial_rmse
         rango= int(np.nanmax(np.array(data)))
-        ClimateDataEvaluation.plotter(self, data, np.linspace(0, rango+1, 10), 'OrRd','RMSE', 'RMSE Map', ax4, pixel_style=True)
+        ClimateDataEvaluation.plotter(self, data, np.linspace(0, rango+1, 10), 'OrRd','RMSE', 'RMSE map', ax4, pixel_style=True)
         
-        plt.style.use('seaborn')
         # Subplot 4: Temporal RMSE Plot
         ax5 = fig.add_subplot(224)
         data = {'time': temporal_rmse.time, 'Predictions RMSE': temporal_rmse}
@@ -863,7 +779,7 @@ class ClimateDataEvaluation:
         for i, col in enumerate(df.columns):
             ax5.bar(df.index, df[col], width=width, color=color_dict[col], label=col)
 
-        ax5.set_title('Time Series of RMSE', fontsize=18)
+        ax5.set_title('Time series of global RMSE', fontsize=18)
         ax5.legend(loc='upper right')
         ax5.set_ylabel(f'{units}')
         fig.suptitle(f'Comparison of metrics of {var_y} from months "{months_y}"  when predicting with {predictor_region} {var_x} from months "{months_x}"', fontsize=20)
@@ -875,6 +791,62 @@ class ClimateDataEvaluation:
             plt.savefig(outputs_path + 'correlations.png')
 
         return fig
+
+    def atributions(self, model, X_test, lat_lims, lon_lims, std_y, test_years):
+        # Create latitude and longitude grids
+        latitudes, longitudes = np.array(self.lat_y), np.array(self.lon_y)
+        longitude_grid, latitude_grid = np.meshgrid(longitudes, latitudes)
+
+        # Flatten latitude and longitude grids
+        flat_latitude,flat_longitude = latitude_grid.flatten(), longitude_grid.flatten()
+
+        # Define latitude and longitude limits
+        lat_min, lat_max = lat_lims[0], lat_lims[1]
+        lon_min, lon_max = lon_lims[0], lon_lims[1]
+
+        # Find indices of points within limits
+        indices_within_limits = list(np.where((flat_latitude >= lat_min) & (flat_latitude <= lat_max) &(flat_longitude >= lon_min) & (flat_longitude <= lon_max))[0])
+        # Ensure indices are within valid target range
+        valid_target_range = np.prod(model.output_shape[1:]) 
+        indices_within_limits = [i for i in indices_within_limits if i < valid_target_range]
+        
+        if not indices_within_limits:
+            raise ValueError("No indices within limits found within valid target range.")
+        
+        sample_index = 0
+        X_test_sample = X_test[sample_index:sample_index + 1]
+        baseline = X_test_sample * 0
+
+        ig = IntegratedGradients(model,layer=None,method="gausslegendre",n_steps=50,internal_batch_size=100)
+
+        importances_mean_year= []
+        print('Computing importances for each year over the selected region...')
+        for j in range(0,X_test.shape[0]):
+            # Select a specific instance (single event)
+            sample_index = j
+            # Get a single sample
+            X_test_sample = X_test[sample_index:sample_index + 1]
+            baseline = X_test_sample * 0
+            attributions_all= []
+            for i in indices_within_limits:
+                explanation = ig.explain(np.array(X_test_sample), baselines=np.array(baseline), target=int(i))
+                attributions = explanation.attributions[0]
+                #nex we multiply the importance by the std_slp of each point
+                attributions= attributions*(np.array(std_y).flatten()[int(i)])
+                attributions_all.append(attributions)
+            importances_mean= np.mean(np.array(attributions_all), axis=0).ravel() #if the input is flattened
+            #importances_mean= np.reshape(np.mean(np.array(attributions_all), axis=0), (np.mean(np.array(attributions_all), axis=0).shape[1:3])) #if the input is (time, lat, lon, channel)
+            importances_mean_year.append(importances_mean)
+        
+        nt,nlat, nlon= (np.array(X_test)).shape
+        importances = xr.DataArray(
+            data=np.reshape(np.array(importances_mean_year),(nt,nlat,nlon)),
+            dims=["time", "latitude", 'longitude'],
+            coords=dict(
+                time=(np.array(test_years)),
+                latitude= np.array(X_test.latitude),
+                longitude= np.array(X_test.longitude)))
+        return importances
 
     def cross_validation(self, n_folds, model_class):
         """
@@ -895,6 +867,7 @@ class ClimateDataEvaluation:
         # create an empty list to store predicted values from each fold
         predicted_list = []
         correct_value_list = []
+        importances_list = []
         years = np.arange(self.time_lims[0], self.time_lims[-1]+1,1)
         years_division_list = []
         # Loop over the folds
@@ -902,12 +875,27 @@ class ClimateDataEvaluation:
             print(f'Fold {i+1}/{n_folds}')
             print('Training on:',years[train_index])
             print('Testing on:', years[testing_index])
-
             # Get the training and validation data for this fold
-            X_train_fold = self.X[train_index]
-            Y_train_fold = self.Y[train_index]
-            X_testing_fold = self.X[testing_index]
-            Y_testing_fold = self.Y[testing_index]
+            mean_reference_x, mean_reference_y  = np.mean((self.X[train_index]), axis=0), np.mean((self.Y[train_index]), axis=0)
+            std_reference_x, std_reference_y  = np.std((self.X[train_index]), axis=0), np.std((self.Y[train_index]), axis=0)
+            X, Y = (self.X-mean_reference_x)/std_reference_x, (self.Y-mean_reference_y)/std_reference_y
+            X = X.fillna(value=0)
+            Y = Y.fillna(value=0)
+            if np.ndim(Y)>2:
+                Y = (Y.stack(space=('latitude','longitude'))).reset_index('space') #to convert the predictand to a (time, space) matrix
+
+            if self.detrend_x:
+                rolling_mean_x = X.rolling(year=self.detrend_x_window, center=False).mean()
+                X[self.detrend_x_window:] = X[self.detrend_x_window:] - rolling_mean_x[self.detrend_x_window:]
+
+            if self.detrend_y:
+                rolling_mean_y = Y.rolling(year=self.detrend_y_window, center=False).mean()
+                Y[self.detrend_y_window:] = Y[self.detrend_y_window:] - rolling_mean_y[self.detrend_y_window:]
+
+            X_train_fold = X[train_index]
+            Y_train_fold = Y[train_index]
+            X_testing_fold = X[testing_index]
+            Y_testing_fold = Y[testing_index]
 
             model_cv = model_class.create_model()
             model_cv, record= model_class.train_model(X_train=X_train_fold, Y_train=Y_train_fold, X_valid=X_train_fold, Y_valid=Y_train_fold)
@@ -915,13 +903,20 @@ class ClimateDataEvaluation:
             predicted_list.append(predicted_value)
             correct_value_list.append(observed_value)
             years_division_list.append(years[testing_index])
-            
+            if self.importances:
+                imp_fold= ClimateDataEvaluation.atributions(self,model_cv,X_testing_fold, lat_lims=self.region_atributted[0], lon_lims=self.region_atributted[1], std_y=std_reference_y, test_years=years[testing_index])
+                importances_list.append(imp_fold)
+                
         # concatenate all the predicted values in the list into one global dataarray
         predicted_global = xr.concat(predicted_list, dim='time')
         correct_value = xr.concat(correct_value_list, dim='year')
-        return predicted_global,correct_value,years_division_list
+        if self.importances:
+            importances_global= xr.concat(importances_list, dim='time')
+            return predicted_global,correct_value,years_division_list,importances_global
+        else:
+            return predicted_global,correct_value,years_division_list
 
-    def correlations_pannel(self, n_folds, predicted_global, correct_value, years_division, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False, plot_differences=False):
+    def correlations_pannel(self, n_folds, predicted_global, correct_value,threshold, years_division, outputs_path,months_x, months_y, var_x, var_y, predictor_region, best_model=False, plot_differences=False):
         """
         Visualize correlations for each ensemble member in a panel plot.
 
@@ -941,7 +936,7 @@ class ClimateDataEvaluation:
         years= np.arange(self.time_lims[0], self.time_lims[-1]+1,1)
 
         # Calculate correlation for each ensemble member
-        fig, axes = plt.subplots(nrows=(n_folds // 3 + 1), ncols=3, figsize=(20, 10),
+        fig, axes = plt.subplots(nrows=(n_folds // 3 + 1), ncols=3, figsize=(15, 5),
                                 subplot_kw={'projection': ccrs.PlateCarree()})
 
         # Flatten the 2D array of subplots to simplify indexing
@@ -950,6 +945,7 @@ class ClimateDataEvaluation:
         predictions_member = predicted_global
         correct_value = correct_value.rename({'year': 'time'})
         spatial_correlation_global = xr.corr(predicted_global, correct_value, dim='time')
+        p_value_global = xs.pearson_r_p_value(predicted_global, correct_value, dim='time')
         acc_clevs = [-1,-0.9,-0.8,-0.7,-0.6,-0.4,-0.2,0.2,0.4,0.6,0.7,0.8,0.9,1]
         colors = np.array([[0,0,255],[0,102,201],[119,153,255],[119,187,255],[170,221,255], [170,255,255],[170,170,170], [255,255,0],
                         [255,204,0], [255,170,0],[255,119,0],[255,0,0],[119,0,34]], np.float32) / 255.0
@@ -961,19 +957,24 @@ class ClimateDataEvaluation:
                 years_fold_div= years_division[i]
                 
                 predictions_loop = predictions_member.sel(time=slice(years_fold_div[0],years_fold_div[-1]))
-                spatial_correlation_member = xr.corr(predictions_loop, correct_value, dim='time')
-
+                spatial_correlation_member = xr.corr(predictions_loop, correct_value.sel(time=slice(years_fold_div[0],years_fold_div[-1])), dim='time')
+                p_value = xs.pearson_r_p_value(predictions_loop, correct_value.sel(time=slice(years_fold_div[0],years_fold_div[-1])), dim='time')
+                
                 # Plot the correlation map
                 ax = axes[i]
+
                 rango=1
                 if plot_differences==True:
                     data_member = spatial_correlation_member-spatial_correlation_global
                     im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold_div[0])+'-'+str(years_fold_div[-1]), ax=ax, plot_colorbar=False)
+                    hatch_mask = p_value < threshold
+                    ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
 
                 else:
                     data_member = spatial_correlation_member
                     im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold_div[0])+'-'+str(years_fold_div[-1]), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
-    
+                    hatch_mask = p_value < threshold
+                    ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
 
                 if i==n_folds-1:
                     rango=1
@@ -981,7 +982,13 @@ class ClimateDataEvaluation:
                     ax = axes[i+1]
                     data_member = spatial_correlation_global
                     im2= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='ACC Global', ax=ax, plot_colorbar=False,acc_norm=acc_norm)
+                    hatch_mask = p_value_global < threshold
+                    ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
 
+        # remove unused axes
+        for ax in axes[n_folds+1:]:
+            ax.remove()
+    
         # Add a common colorbar for all subplots
         if plot_differences==True:
             cbar_ax = fig.add_axes([0.92, 0.35, 0.02, 0.5])  # Adjust the position for your preference
@@ -1314,21 +1321,21 @@ def Preprocess(dictionary_hyperparams):
     start_time = time.time()
 
     data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
-        time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],overlapping=dictionary_hyperparams['overlapping_x'],variable_name=dictionary_hyperparams['name_x'],
+        time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],variable_name=dictionary_hyperparams['name_x'],
         months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'], signal_filtering=dictionary_hyperparams['filter_x'], cut_off=dictionary_hyperparams['cut_off_x'], filter_type=dictionary_hyperparams['filter_type_x'])
+        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_x'],detrend_window=dictionary_hyperparams['detrend_x_window'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'],train_years=dictionary_hyperparams['train_years'])
     
     data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
-        time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],overlapping=dictionary_hyperparams['overlapping_y'],variable_name=dictionary_hyperparams['name_y'],
+        time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],variable_name=dictionary_hyperparams['name_y'],
         months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
-        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'], signal_filtering=dictionary_hyperparams['filter_y'], cut_off=dictionary_hyperparams['cut_off_y'], filter_type=dictionary_hyperparams['filter_type_y'])
+        reference_period=dictionary_hyperparams['reference_period'],detrend=dictionary_hyperparams['detrend_y'],detrend_window=dictionary_hyperparams['detrend_y_window'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'],train_years=dictionary_hyperparams['train_years'])
         
     # Preprocess data
-    data_input,lat_x,lon_x, data_x, anom_x,norm_x,mean_x,std_x = data_mining_x.preprocess_data()
-    data_output,lat_y,lon_y, data_y, anom_y,norm_y,mean_y,std_y = data_mining_y.preprocess_data()
+    lat_x,lon_x, data_x, anom_x,norm_x,mean_x,std_x = data_mining_x.preprocess_data()
+    lat_y,lon_y, data_y, anom_y,norm_y,mean_y,std_y = data_mining_y.preprocess_data()
 
     data_splitter = DataSplitter(train_years=dictionary_hyperparams['train_years'], validation_years=dictionary_hyperparams['validation_years'], testing_years=dictionary_hyperparams['testing_years'], 
-        predictor=norm_x, predictant=norm_y, jump_year=dictionary_hyperparams['jump_year'], replace_nans_with_0_predictor=dictionary_hyperparams['replace_nans_with_0_predictor'], replace_nans_with_0_predictant=dictionary_hyperparams['replace_nans_with_0_predictant'])
+        predictor=norm_x, predictant=norm_y, jump_year=dictionary_hyperparams['jump_year'])
     X, X_train, X_valid, X_test, Y, Y_train, Y_valid, Y_test, input_shape,output_shape = data_splitter.prepare_data()
 
     end_time = time.time()
@@ -1361,7 +1368,7 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
         ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
     return fig1, fig2, fig3, predicted_global, observed_global
     
-def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_validation=False, n_cv_folds=0, plot_differences=False):
+def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_validation=False, n_cv_folds=0, plot_differences=False, importances=False,region_importances=None):
     print('Now creating and training the model')
     start_time = time.time()
     neural_network = NeuralNetworkModel(input_shape=dictionary_preprocess['data_split']['input_shape'], output_shape=dictionary_preprocess['data_split']['output_shape'], layer_sizes=dictionary_hyperparams['layer_sizes'], activations=dictionary_hyperparams['activations'], dropout_rates=dictionary_hyperparams['dropout_rates'], kernel_regularizer=dictionary_hyperparams['kernel_regularizer'],
@@ -1370,39 +1377,47 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
 
     model = neural_network.create_model(outputs_path=dictionary_hyperparams['outputs_path'])
     model, record= neural_network.train_model(dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['Y_valid'], dictionary_hyperparams['outputs_path'])
-    evaluations_toolkit= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
-        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'])
+    evaluations_toolkit= ClimateDataEvaluation(dictionary_preprocess['input']['data'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['output']['data'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
+        dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], model, dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'],detrend_x=dictionary_hyperparams['detrend_x'],detrend_x_window=dictionary_hyperparams['detrend_x_window'],detrend_y=dictionary_hyperparams['detrend_y'],detrend_y_window=dictionary_hyperparams['detrend_y_window'], importances=importances, region_atributted=region_importances)
     
     output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'data_outputs')
     os.makedirs(output_directory, exist_ok=True)
-    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies.nc'), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': 'predictor_anomalies'}})
+    (dictionary_preprocess['input']['anomaly']).to_netcdf(os.path.join(output_directory,'predictor_anomalies.nc'), format='NETCDF4', mode='w', group='/', engine='netcdf4')
     
     if cross_validation==False:
         neural_network.performance_plot(record)
-        predicted_value,correct_value= evaluations_toolkit.evaluation()
+        predicted_value,correct_value= evaluations_toolkit.evaluation()        
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path=dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
         datasets, names = [predicted_value, correct_value], ['predicted_test_period.nc', 'observed_test_period.nc']
         variable_names = ['predicted_value', 'observed_value']
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
-            ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
+            ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4')
 
     else:
-        predicted_value,correct_value,years_division_list= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
+        if importances:
+            predicted_value,correct_value,years_division_list, importances_region= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
+        else:
+            predicted_value,correct_value,years_division_list= evaluations_toolkit.cross_validation(n_folds=n_cv_folds, model_class=neural_network)
+        
         fig1= evaluations_toolkit.correlations(predicted_value,correct_value,outputs_path= dictionary_hyperparams['outputs_path'], threshold=dictionary_hyperparams['p_value'], units=dictionary_hyperparams['units_y'], var_x=dictionary_hyperparams['name_x'], var_y=dictionary_hyperparams['name_y'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'], best_model=False)
-        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,years_division=years_division_list,outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False, plot_differences=plot_differences)
+        fig2= evaluations_toolkit.correlations_pannel(n_folds=n_cv_folds,predicted_global=predicted_value, correct_value=correct_value,years_division=years_division_list, threshold=dictionary_hyperparams['p_value'],outputs_path= dictionary_hyperparams['outputs_path'], months_x=dictionary_hyperparams['months_x'], months_y=dictionary_hyperparams['months_y'], predictor_region=dictionary_hyperparams['region_predictor'],var_x=dictionary_hyperparams['name_x'],var_y=dictionary_hyperparams['name_y'], best_model=False, plot_differences=plot_differences)
         datasets, names = [predicted_value, correct_value], ['predicted_global_cv.nc', 'observed_global_cv.nc']
         variable_names = ['predicted_global', 'observed_global']
         # Save each dataset to a NetCDF file in the 'data_outputs' folder
         for i, ds in enumerate(datasets, start=1):
-            ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
+            ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4')
 
     end_time = time.time()
     time_taken = end_time - start_time
     print(f'Training done (Time taken: {time_taken:.2f} seconds)')
-    return predicted_value, correct_value
+    if importances:
+        model_outputs = {'predictions': predicted_value,'observations':correct_value,'importances':importances_region, 'region_attributed':region_importances}
+    else:
+        model_outputs = {'predictions': predicted_value,'observations':correct_value}
+    return model_outputs
 
-def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, plot_with_contours=False):
+def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, predictions, observations, years_to_plot=None, plot_with_contours=False, importances=None,region_importances=None):
     evaluations_toolkit_input= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
             dictionary_preprocess['input']['lon'], dictionary_preprocess['input']['lat'], dictionary_preprocess['output']['std'], None, hyperparameters['time_lims'],  hyperparameters['train_years'], hyperparameters['testing_years'],dictionary_preprocess['output']['normalized'], jump_year=hyperparameters['jump_year'])
     evaluations_toolkit_output= ClimateDataEvaluation(dictionary_preprocess['data_split']['X'], dictionary_preprocess['data_split']['X_train'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['data_split']['Y'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_test'], 
@@ -1422,8 +1437,8 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         if plot_with_contours==True:
             ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
             ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree())
-            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
-            im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/10),extend='both',transform=ccrs.PlateCarree())
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
+            im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/5),extend='both',transform=ccrs.PlateCarree())
             ax2.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
             ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}. Pred=colours and Obs=lines",fontsize=10)
 
@@ -1431,40 +1446,51 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             ax = fig.add_subplot(131, projection=ccrs.PlateCarree(central_longitude=-180))
             ax2 = fig.add_subplot(132, projection=ccrs.PlateCarree())
             ax3 = fig.add_subplot(133, projection=ccrs.PlateCarree())
-            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False)
-            im3= evaluations_toolkit_output.plotter(np.array(data_output_obs), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax3, pixel_style=False, plot_colorbar=False)
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
+            im3= evaluations_toolkit_output.plotter(np.array(data_output_obs), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax3, pixel_style=False, plot_colorbar=False, extend='both')
             ax2.set_title(f"Predictions for {hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
             ax3.set_title(f"Observations for {hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
             if rang_y>100:
-                cbar3 = plt.colorbar(im3, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%1.1f")
+                cbar3 = plt.colorbar(im3, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%1.1f")
                 tick_values = cbar3.get_ticks() 
                 cbar3.set_ticks(tick_values)
                 tick_labels = [f'{val/rang_y:.1f}' for val in tick_values]
                 cbar3.ax.set_xticklabels(tick_labels)
                 cbar3.set_label(f'*{rang_y:1.1e} {hyperparameters["units_y"]}', size=10)
             else:
-                cbar3 = plt.colorbar(im3, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%2.1f")
+                cbar3 = plt.colorbar(im3, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%2.1f")
                 cbar3.set_label(f'{hyperparameters["units_y"]}', size=10)
                 
             cbar3.ax.tick_params(labelsize=10)
             
         data_input= dictionary_preprocess['input']['anomaly'].sel(year=i)
-        im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x, rang_x/10), 'RdBu_r',f'Anomalies {hyperparameters["units_x"]}', '', ax, pixel_style=False, plot_colorbar=False)
-        ax.set_title(f"{hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
+        if importances is not None:
+            rang_imp = np.max(np.abs(importances))/5
+            im= evaluations_toolkit_input.plotter(np.array(importances.sel(time=i)), np.arange(-rang_imp, rang_imp, rang_imp/10), 'RdBu_r',f'Importances {hyperparameters["units_y"]}', '', ax, pixel_style=True, plot_colorbar=False, extend='both')
+            im3= ax.contour(data_input.longitude,data_input.latitude,data_input,colors='black',levels=np.arange(-rang_x, rang_x, rang_x/5),extend='both',transform=ccrs.PlateCarree())
+            ax.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
+            ax.set_title(f"Importances and {hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
+            rect = mpatches.Rectangle((region_importances[1][0], region_importances[0][1]), region_importances[1][1] - region_importances[1][0],region_importances[0][0] - region_importances[0][1], linewidth=2, edgecolor='green', facecolor='none',fill=True, transform=ccrs.PlateCarree(), label='Importances region')
+            ax2.add_patch(rect)
+            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%1.1f")
+            cbar1.set_label(f'Importances {hyperparameters["units_y"]}', size=10)
 
-        if rang_x>100:
-            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%1.1f")
-            tick_values = cbar1.get_ticks() 
-            cbar1.set_ticks(tick_values)
-            tick_labels = [f'{val/rang_x:.1f}' for val in tick_values]
-            cbar1.ax.set_xticklabels(tick_labels)
-            cbar1.set_label(f'*{rang_x:1.1e} {hyperparameters["units_x"]}', size=10)
         else:
-            cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%2.1f")
-            cbar1.set_label(f'{hyperparameters["units_x"]}', size=10)
+            im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x, rang_x/10), 'RdBu_r',f'Anomalies {hyperparameters["units_x"]}', '', ax, pixel_style=False, plot_colorbar=False, extend='both')
+            ax.set_title(f"{hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
+            if rang_x>100:
+                cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%1.1f")
+                tick_values = cbar1.get_ticks() 
+                cbar1.set_ticks(tick_values)
+                tick_labels = [f'{val/rang_x:.1f}' for val in tick_values]
+                cbar1.ax.set_xticklabels(tick_labels)
+                cbar1.set_label(f'*{rang_x:1.1e} {hyperparameters["units_x"]}', size=10)
+            else:
+                cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%2.1f")
+                cbar1.set_label(f'{hyperparameters["units_x"]}', size=10)
 
         if rang_y>100:
-            cbar2 = plt.colorbar(im2, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%1.1f")
+            cbar2 = plt.colorbar(im2, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%1.1f")
             tick_values = cbar2.get_ticks() 
             cbar2.set_ticks(tick_values)
             tick_labels = [f'{val/rang_y:.1f}' for val in tick_values]
@@ -1472,7 +1498,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             cbar2.set_label(f'*{rang_y:1.1e} {hyperparameters["units_y"]}', size=10)
             
         else:
-            cbar2 = plt.colorbar(im2, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.7, format="%2.1f")
+            cbar2 = plt.colorbar(im2, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%2.1f")
             cbar2.set_label(f'{hyperparameters["units_y"]}', size=10)
 
         cbar1.ax.tick_params(labelsize=10)        
@@ -1480,7 +1506,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         
         plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
     return
-            
+
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r'):
     if 'year' not in observation.coords:
         observation = observation.rename({'time': 'year'})
@@ -1689,4 +1715,5 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
     for i, ds in enumerate(datasets, start=1):
         ds.to_netcdf(os.path.join(output_directory, names[i-1]), format='NETCDF4', mode='w', group='/', engine='netcdf4', encoding={var_name: {'name': var_name} for var_name in variable_names})
             
-    return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs   
+    return pcs_pred, np.array(eofs_pred_list), pcs_obs, np.array(eofs_obs_list), clusters_pred, clusters_obs 
+
