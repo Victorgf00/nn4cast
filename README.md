@@ -33,34 +33,34 @@ hyperparameters = {
     'path_y': 'slp_ERA5_1940-2023.nc',
 
     # Time limits
-    'time_lims': [1950, 2019],
+    'time_lims': [1940, 2019],
 
     # Years for output: using the policy of the predictor years
-    'years_finally': np.arange(1950, 2019+1, 1), 
+    'years_finally': np.arange(1940, 2019+1, 1), 
     'jump_year': 0, #this is necesary when the predictor and predictand has different years for each sample (default=0)
 
-    # Reference period: period for computing the mean and standard deviation (using the years of the predictor)
+    # Reference period: period for computing the mean and standard deviation
     'reference_period': [1950, 2000], 
 
     # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
     # the years policy is from the input (X)
-    'train_years': [1950, 1989],
-    'validation_years': [1990, 1999],
+    'train_years': [1940, 1989],
+    'validation_years': [1990,1999],
     'testing_years': [2000, 2019],
 
-    # Input and output limits: for latitude you can put in any order, for longitude either -
+    # Input and output limits: for latitude first the northernmost, for longitude either -
     # -180-(+180) or 0-360, putting first the smaller number
-    'lat_lims_x': [55, -20],
-    'lon_lims_x': [120, 280],
-    'lat_lims_y': [75, 15], 
-    'lon_lims_y': [-60, 40], 
+    'lat_lims_x': [+75, -20],
+    'lon_lims_x': [+120, +280],
+    'lat_lims_y': [+75, -20], 
+    'lon_lims_y': [-180, +180], 
 
     #Variable names, as defined in the .nc datasets
     'name_x': 'sst',
     'name_y': 'msl',
 
-    # Months and months to skip, knowing that January=1 and December=12
-    'months_x': [10],
+    # Months and months to skip
+    'months_x': [9, 10],
     'months_skip_x': ['None'],
     'months_y': [11, 12],
     'months_skip_y': ['None'],
@@ -77,33 +77,17 @@ hyperparameters = {
     'scale_x': 1, 
     'scale_y': 100, 
 
-    # Detrending: if you want to perform a detrending in the data
+    # Detrending:
     'detrend_x': True, 
+    'detrend_x_window': 15,
     'detrend_y': True,
-
-    # Overlapping: this is necessary if there is data for 0 and 360
-    'overlapping_x': False, 
-    'overlapping_y': False,
-
-    # Filtering: select True if passing a filter to isolate some signals,
-    # with the cut_off frequency and the type of filter desired ('low' or 'high')
-    'filter_x': True, 
-    'filter_y': True,
-    'cut_off_x': 12,
-    'cut_off_y': 12,
-    'filter_type_x': 'high',
-    'filter_type_y': 'high',
-
-    # Nans policy: define how to deal with nans, either delete them or substitute to 0,
-    # when deleting, it flattens the array
-    'replace_nans_with_0_predictor': False, 
-    'replace_nans_with_0_predictant': False, 
+    'detrend_y_window': 15,
 
     # Neural network hyperparameters (default parameters)
     'layer_sizes': [1024, 256, 64],
     'activations': [tf.keras.activations.elu, tf.keras.activations.elu, tf.keras.activations.elu],
-    'dropout_rates': [0.0],
-    'kernel_regularizer': 'l1_l2',
+    'dropout_rates': [0.1],
+    'kernel_regularizer': 'l2',
     'learning_rate': 0.0001,
     'epochs': 2500,
     'num_conv_layers':0,
@@ -115,13 +99,13 @@ hyperparameters = {
 
     # Plotting parameters
     'mapbar': 'bwr',
-    'units_x': '[$^{\circ}C$]',
+    'units_x': '[$^{\circ} C$]',
     'units_y': '[$hPa$]',
     'region_predictor': 'Pacific',
     'p_value': 0.1,
 
     # Outputs path: define where to save all the plots and datasets
-    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_slp/Outputs_ND_sst_O/'}
+    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_slp/Outputs_ND_sst_SO_Pac/'}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
 
@@ -137,14 +121,13 @@ print(f"Layers sizes: {hyperparameters['layer_sizes']} ; activations: {hyperpara
 ### II. Preprocessing, Training & Testing the model
 ```python
 dictionary_preprocess= Preprocess(dictionary_hyperparams= hyperparameters)
-predicted_value,observed_value= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=False, n_cv_folds=0)
-predicted_global,observed_global= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation=True, n_cv_folds=8, plot_differences=False)
+outputs_hold_out = Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation= False, n_cv_folds=0)
+outputs_cross_validation= Model_build_and_test(dictionary_hyperparams= hyperparameters, dictionary_preprocess= dictionary_preprocess, cross_validation= True, n_cv_folds=4, plot_differences=False, importances=True, region_importances=[[50,65],[-25,-10]])
 ```
 
 ### III. Evaluation of some results
 ```python
-Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=1e9, predictions=predicted_global, observations=observed_global, years_to_plot=[1955,2016], plot_with_contours=True)
-pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r')
+Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=10, predictions=outputs_cross_validation['predictions'], observations=outputs_cross_validation['observations'], years_to_plot=[1962,1963], plot_with_contours=False, importances=outputs_cross_validation['importances'], region_importances=outputs_cross_validation['region_attributed'])pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r')
 ```
 
 ### IV. Hyperparameter tunning and testing again
