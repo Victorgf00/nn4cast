@@ -406,6 +406,7 @@ class NeuralNetworkModel:
 
         # Create and summarize the model
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        '''
         if outputs_path:
             if best_model==True:
                 fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure_best_model.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
@@ -413,7 +414,7 @@ class NeuralNetworkModel:
             else:
                 fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100,layer_range=None,show_layer_activations=True)
                 #fig= tf.keras.utils.plot_model(model,to_file= outputs_path+'model_structure.png',show_shapes=True,show_dtype=False,show_layer_names=True,rankdir='TB',expand_nested=False,dpi=100)
-
+        '''
         return model
 
     def train_model(self, X_train, Y_train, X_valid, Y_valid, outputs_path=None, best_model=False):
