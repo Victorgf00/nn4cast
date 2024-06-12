@@ -8,11 +8,10 @@
 
 To get the latest version:
 ```console
-    $ conda create -n <your-env-name> python=3.9.15
+    $ conda create -n <your-env-name>
     $ conda activate <your-env-name>
-    (<your-env-name>) $ conda install cartopy
+    (<your-env-name>) $ conda install cartopy python=3.9.15
     (<your-env-name>) $ pip install git+https://github.com/Victorgf00/nn4cast
-    (<your-env-name>) $ conda install pydot graphviz
 ```
 
 To update to the latest version:
