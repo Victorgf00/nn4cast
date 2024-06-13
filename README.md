@@ -123,7 +123,8 @@ outputs_cross_validation= Model_build_and_test(dictionary_hyperparams= hyperpara
 
 ### III. Evaluation of some results
 ```python
-Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=10, predictions=outputs_cross_validation['predictions'], observations=outputs_cross_validation['observations'], years_to_plot=[1962,1963], plot_with_contours=False, importances=outputs_cross_validation['importances'], region_importances=outputs_cross_validation['region_attributed'])pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r')
+Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=10, predictions=outputs_cross_validation['predictions'], observations=outputs_cross_validation['observations'], years_to_plot=[1962,1963], plot_with_contours=False, importances=outputs_cross_validation['importances'], region_importances=outputs_cross_validation['region_attributed'])
+pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r')
 ```
 
 ### IV. Hyperparameter tunning and testing again
