@@ -124,23 +124,24 @@ outputs_cross_validation= Model_build_and_test(dictionary_hyperparams= hyperpara
 ### III. Evaluation of some results
 ```python
 Results_plotter(hyperparameters, dictionary_preprocess, rang_x=2.5, rang_y=10, predictions=outputs_cross_validation['predictions'], observations=outputs_cross_validation['observations'], years_to_plot=[1962,1963], plot_with_contours=False, importances=outputs_cross_validation['importances'], region_importances=outputs_cross_validation['region_attributed'])
-pcs_pred, eofs_pred, pcs_obs, eofs_obs, cluster_pred, cluster_obs= PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=4, cmap='RdBu_r')
+eof_analysis = PC_analysis(hyperparameters, predicted_global, observed_global, n_modes=4, n_clusters=3, cmap='RdBu_r')
 ```
 
 ### IV. Hyperparameter tunning and testing again
 ```python
 params_selection = {
-    'pos_number_layers': 5,  # set the maximum value of fully connected layers (int)
+    'pos_number_layers': 3,  # set the maximum value of fully connected layers (int)
     'pos_layer_sizes': [16, 64, 256],  # set the possible layer sizes (list)
     'pos_activations': ["elu", "linear"],  # set the possible activation functions (possibilities are all the ones availabe in tensorflow: tf.keras.layers.activations()) (list)
-    'pos_dropout': [0.0, 0.01],  # set the possible dropout rates (list)
-    'pos_kernel_regularizer': ["l1_l2"],  # set the possible kernel regularizer (possibilities are: l1_l2, l1, l2, None) (list)
+    'pos_dropout': [0.1],  # set the possible dropout rates (list)
+    'pos_kernel_regularizer': ["l2","l1_l2"],  # set the possible kernel regularizer (possibilities are: l1_l2, l1, l2, None) (list)
     'search_skip_connections': False,  # set if searching for skip connections (either intermediate or end_to_end) (bool)
     'pos_conv_layers': 0,  # set the maximum number of convolutional layers, the entry data must be 2D (int)
     'pos_learning_rate':  [1e-4,1e-3]} # set the possible learning rates (list)
 
 #In the following line, you can modify the maximum number of trials ("max_trials") that the searcher does to look for the more optimum hyperparameters
-fig4,fig5,fig6, predicted_global_bm, observed_global_bm= Model_searcher(dictionary_hyperparams= hyperparameters, dictionary_preprocess=dictionary_preprocess, dictionary_possibilities= params_selection, max_trials=10, n_cv_folds=8)
+outputs_bm_cross_validation = Model_searcher(dictionary_hyperparams=hyperparameters, dictionary_preprocess=dictionary_preprocess, dictionary_possibilities=params_selection, max_trials=1, n_cv_folds=2)
+
 ```
 
 ## Citation
