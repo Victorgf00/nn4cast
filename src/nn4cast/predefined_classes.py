@@ -1389,7 +1389,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         if plot_with_contours==True:
             ax = fig.add_subplot(121, projection=ccrs.PlateCarree(central_longitude=-180))
             ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree())
-            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y+rang_y/10, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
             im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/5),extend='both',transform=ccrs.PlateCarree())
             ax2.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
             ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}. Pred=colours and Obs=lines",fontsize=10)
@@ -1398,8 +1398,8 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             ax = fig.add_subplot(131, projection=ccrs.PlateCarree(central_longitude=-180))
             ax2 = fig.add_subplot(132, projection=ccrs.PlateCarree())
             ax3 = fig.add_subplot(133, projection=ccrs.PlateCarree())
-            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
-            im3= evaluations_toolkit_output.plotter(np.array(data_output_obs), np.arange(-rang_y, rang_y, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax3, pixel_style=False, plot_colorbar=False, extend='both')
+            im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y+rang_y/10, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
+            im3= evaluations_toolkit_output.plotter(np.array(data_output_obs), np.arange(-rang_y, rang_y+rang_y/10, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax3, pixel_style=False, plot_colorbar=False, extend='both')
             ax2.set_title(f"Predictions for {hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
             ax3.set_title(f"Observations for {hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}",fontsize=10)
             if rang_y>100:
@@ -1420,7 +1420,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             rang_imp = np.max(np.abs(importances))/5
             if rang_atr:
                 rang_imp = rang_atr
-            im= evaluations_toolkit_input.plotter(np.array(importances.sel(time=i)), np.arange(-rang_imp, rang_imp, rang_imp/10), 'RdBu_r',f'Importances {hyperparameters["units_y"]}', '', ax, pixel_style=True, plot_colorbar=False, extend='both')
+            im= evaluations_toolkit_input.plotter(np.array(importances.sel(time=i)), np.arange(-rang_imp, rang_imp+rang_imp/10, rang_imp/10), 'RdBu_r',f'Importances {hyperparameters["units_y"]}', '', ax, pixel_style=True, plot_colorbar=False, extend='both')
             im3= ax.contour(data_input.longitude,data_input.latitude,data_input,colors='black',levels=np.arange(-rang_x, rang_x, rang_x/5),extend='both',transform=ccrs.PlateCarree())
             ax.clabel(im3, inline=True, fontsize=10, fmt="%1.1f")
             ax.set_title(f"Importances and {hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
@@ -1430,7 +1430,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             cbar1.set_label(f'Importances {hyperparameters["units_y"]}', size=10)
 
         else:
-            im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x, rang_x/10), 'RdBu_r',f'Anomalies {hyperparameters["units_x"]}', '', ax, pixel_style=False, plot_colorbar=False, extend='both')
+            im= evaluations_toolkit_input.plotter(np.array(data_input), np.arange(-rang_x, rang_x+rang_x/10, rang_x/10), 'RdBu_r',f'Anomalies {hyperparameters["units_x"]}', '', ax, pixel_style=False, plot_colorbar=False, extend='both')
             ax.set_title(f"{hyperparameters['name_x']} of months '{hyperparameters['months_x']}' from year {str(i)}",fontsize=10)
             if rang_x>100:
                 cbar1 = plt.colorbar(im, extend='neither', spacing='proportional',orientation='horizontal', shrink=0.9, format="%1.1f")
