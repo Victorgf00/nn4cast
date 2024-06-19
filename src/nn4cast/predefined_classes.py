@@ -530,12 +530,7 @@ class ClimateDataEvaluation:
 
     def plotter(self, data, levs, cmap1, l1, titulo, ax, pixel_style=False, plot_colorbar=True, acc_norm=None, extend='neither'):
         """
-        Create a filled contour map using Cartopy.
-
-        Args:
-            data (2D array-like): Data values to be plotted.
-            levs (list): Contour levels.
-            cmap1 (Colormap): Matplotlib colormap for the plot.
+        Create a filled contour map using Cartopy.elta el sábado en el tren que me mandan estaría bien, lo único sería aplicarle el descuento correspondiente al verano joven que adjunto en el siguiente código: JV24-54060549S-TC7GXormap for the plot.
             l1 (str): Label for the colorbar.
             titulo (str): Title for the plot.
             ax (matplotlib.axes.Axes): Matplotlib axis to draw the plot on.
@@ -601,28 +596,13 @@ class ClimateDataEvaluation:
 
         predicted = model.predict(np.array(X_test))
         test_years = np.arange(testing_years[0]+self.jump_year, testing_years[1]+self.jump_year+1,1)
-        
         if np.ndim(predicted)<=2:
-            def pongonans(matred,mat):
-                out= mat.mean(axis = 0)
-                out= np.tile(out, (matred.shape[0],1))
-                out[:] = np.nan
-                for i in range(0,matred.shape[0]):
-                    out_1d= out[i,:]
-                    out_1d[~np.isnan(mat.mean(axis = 0))] = matred[i,:]
-                    out[i,:]=out_1d
-                return out
-
             map_orig= self.map_nans
             nt, nlat, nlon= map_orig.shape
-            map_reshape= np.reshape(np.array(map_orig),(nt, nlat*nlon))
-            
-            predicted= pongonans(predicted,np.array(map_reshape)) #if the predictant has nans
-            Y_test= pongonans(Y_test,np.array(map_reshape)) #if the predictant has nans
-            
+
             nt, nm= predicted.shape
             predicted= np.reshape(predicted, (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y))))
-            Y_test= np.reshape(Y_test, (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y))))
+            Y_test= np.reshape(np.array(Y_test), (nt, len(np.array(self.lat_y)), len(np.array(self.lon_y))))
         # Create xarray DataArray for predicted values
         predicted = xr.DataArray(
             data=predicted,
@@ -831,8 +811,9 @@ class ClimateDataEvaluation:
             print('Training on:',years[train_index])
             print('Testing on:', years[testing_index])
             # Get the training and validation data for this fold
-            mean_reference_x, mean_reference_y  = np.mean((self.X[train_index]), axis=0), np.mean((self.Y[train_index]), axis=0)
-            std_reference_x, std_reference_y  = np.std((self.X[train_index]), axis=0), np.std((self.Y[train_index]), axis=0)
+            X,Y = self.X.fillna(value=0), self.Y.fillna(value=0)
+            mean_reference_x, mean_reference_y  = np.mean((X[train_index]), axis=0), np.mean((Y[train_index]), axis=0)
+            std_reference_x, std_reference_y  = np.std((X[train_index]), axis=0), np.std((Y[train_index]), axis=0)
             X, Y = (self.X-mean_reference_x)/std_reference_x, (self.Y-mean_reference_y)/std_reference_y
             X,Y = X.fillna(value=0), Y.fillna(value=0)
             X,Y = X.where(np.isfinite(X), 0), Y.where(np.isfinite(Y), 0)
