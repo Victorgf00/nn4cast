@@ -1457,8 +1457,10 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
 
         cbar1.ax.tick_params(labelsize=10)        
         cbar2.ax.tick_params(labelsize=10)
-        
-        plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
+        if importances is not None:
+            plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}_with_importances.png")
+        else:
+            plt.savefig(output_directory + f"/prediction_evaluation_for_year_{str(i+hyperparameters['jump_year'])}.png")
     return
 
 def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, cmap='RdBu_r'):
