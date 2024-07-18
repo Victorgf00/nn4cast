@@ -284,8 +284,8 @@ class NeuralNetworkModel:
         - use_batch_norm (bool): Flag indicating whether to use batch normalization (default: False).
         - use_initializer (bool): Flag indicating whether to use He initialization (default: False).
         - use_dropout (bool): Flag indicating whether to use dropout (default: False).
-        - use_initial_skip_connections (bool): Flag indicating whether to use skip connections from the initial layer (default: False).
-        - use_intermediate_skip_connections (bool): Flag indicating whether to use skip connections between hidden layers (default: False).
+        - use_init_skip_connections (bool): Flag indicating whether to use skip connections from the initial layer (default: False).
+        - use_inter_skip_connections (bool): Flag indicating whether to use skip connections between hidden layers (default: False).
         - one_output (bool): Flag indicating whether the output layer should have a single unit (default: False).
         - learning_rate (float): Learning rate for model training (default: 0.001).
         - epochs (int): Number of training epochs (default: 100).
@@ -299,7 +299,7 @@ class NeuralNetworkModel:
 
     """
 
-    def __init__(self, input_shape, output_shape, layer_sizes, activations, dropout_rates=None, kernel_regularizer=None, num_conv_layers=0, num_filters=32, pool_size=2, kernel_size=3,use_batch_norm=False, use_initializer=False, use_dropout=False, use_initial_skip_connections=False, use_intermediate_skip_connections=False, one_output=False,learning_rate=0.001, epochs=100, random_seed=42):
+    def __init__(self, input_shape, output_shape, layer_sizes, activations, dropout_rates=None, kernel_regularizer=None, num_conv_layers=0, num_filters=32, pool_size=2, kernel_size=3,use_batch_norm=False, use_initializer=False, use_dropout=False, use_init_skip_connections=False, use_inter_skip_connections=False, one_output=False,learning_rate=0.001, epochs=100, random_seed=42):
         """
         Initialize the NeuralNetworkModel class with the specified parameters.
 
@@ -319,8 +319,8 @@ class NeuralNetworkModel:
         self.use_batch_norm = use_batch_norm
         self.use_initializer = use_initializer
         self.use_dropout = use_dropout
-        self.use_initial_skip_connections = use_initial_skip_connections
-        self.use_intermediate_skip_connections = use_intermediate_skip_connections
+        self.use_init_skip_connections = use_init_skip_connections
+        self.use_inter_skip_connections = use_inter_skip_connections
         self.one_output = one_output
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -379,7 +379,7 @@ class NeuralNetworkModel:
             x = tf.keras.layers.Activation(self.activations[i], name=f'activation_{i+1+self.num_conv_layers}')(x)
             
             # Merge with the skip connection if specified
-            if self.use_intermediate_skip_connections:
+            if self.use_inter_skip_connections:
                 skip_connection_last = skip_connections[-1]
                 skip_connection_last = tf.keras.layers.Dense(units=self.layer_sizes[i], kernel_initializer='he_normal', name=f"dense_skip_connect_{i+1}")(skip_connection_last)
                 x = tf.keras.layers.Add(name=f"merge_skip_connect_{i+1}")([x, skip_connection_last])
@@ -387,7 +387,7 @@ class NeuralNetworkModel:
         if self.kernel_regularizer is not "None":
             x = tf.keras.layers.Dense(units=self.layer_sizes[-1], activation='relu', kernel_regularizer=self.kernel_regularizer, kernel_initializer='he_normal', name="dense_wit_reg2_"+str(self.kernel_regularizer))(x)
             
-        if self.use_initial_skip_connections:
+        if self.use_init_skip_connections:
             skip_connection_first= tf.keras.layers.Flatten()(skip_connections[0])
             skip_connection_first = tf.keras.layers.Dense(units=self.layer_sizes[-1], kernel_initializer='he_normal', name=f"initial_skip_connect")(skip_connection_first)
             x = tf.keras.layers.Add(name=f"merge_skip_connect")([x, skip_connection_first])
@@ -1080,12 +1080,12 @@ class BestModelAnalysis:
 
         # Choose whether to use skip connections
         if search_skip_connections=='True':
-            use_initial_skip_connections = hp.Choice('initial_skip_connection', ['True','False'])
-            print("Use initial skip connections:", use_initial_skip_connections)
-            use_intermediate_skip_connections = hp.Choice('intermediate_skip_connections', ['True','False'])
-            print("Use intermediate skip connections:", use_intermediate_skip_connections)
+            use_init_skip_connections = hp.Choice('initial_skip_connection', ['True','False'])
+            print("Use initial skip connections:", use_init_skip_connections)
+            use_inter_skip_connections = hp.Choice('intermediate_skip_connections', ['True','False'])
+            print("Use intermediate skip connections:", use_inter_skip_connections)
         else:
-            use_initial_skip_connections, use_intermediate_skip_connections= False, False
+            use_init_skip_connections, use_inter_skip_connections= False, False
             
         # Define hyperparameters related to convolutional layers
         if pos_conv_layers>0:    
@@ -1127,7 +1127,7 @@ class BestModelAnalysis:
 
         # Create the model with specified hyperparameters
         neural_network_cv = NeuralNetworkModel(input_shape=self.input_shape, output_shape=self.output_shape, layer_sizes=layer_sizes, activations=activations, dropout_rates=dropout_rate, kernel_regularizer=reg_function,
-                                        num_conv_layers=num_conv_layers, num_filters=num_filters, pool_size=pool_size, kernel_size=kernel_size, use_batch_norm=True, use_initializer=True, use_dropout=True, use_initial_skip_connections=False, use_intermediate_skip_connections=False, learning_rate=learning_rate,
+                                        num_conv_layers=num_conv_layers, num_filters=num_filters, pool_size=pool_size, kernel_size=kernel_size, use_batch_norm=True, use_initializer=True, use_dropout=True, use_init_skip_connections=False, use_inter_skip_connections=False, learning_rate=learning_rate,
                                         epochs=self.epochs)
         model = neural_network_cv.create_model()
         # Define the optimizer with a learning rate hyperparameter
@@ -1207,7 +1207,7 @@ class BestModelAnalysis:
         start_time = time.time()
         neural_network_bm = NeuralNetworkModel(input_shape=self.input_shape, output_shape=self.output_shape, layer_sizes=units_list, activations=activations_list, dropout_rates=dropout_list, kernel_regularizer=kernel_regularizer,
                                             num_conv_layers=num_conv_layers, num_filters=number_of_filters_per_conv, pool_size=pool_size, kernel_size=kernel_size, use_batch_norm=batch_normalization, use_initializer=he_initialization, use_dropout=dropout, 
-                                            use_initial_skip_connections=False, use_intermediate_skip_connections=False, learning_rate=learning_rate,epochs=self.epochs)
+                                            use_init_skip_connections=False, use_inter_skip_connections=False, learning_rate=learning_rate,epochs=self.epochs)
         model_bm = neural_network_bm.create_model(outputs_path=self.outputs_path, best_model=True)
         if cross_validation==False:
             model_bm, record= neural_network_bm.train_model(self.X_train, self.Y_train, self.X_valid, self.Y_valid, self.outputs_path)
@@ -1302,7 +1302,7 @@ def Model_build_and_test(dictionary_hyperparams, dictionary_preprocess, cross_va
     print('Now creating and training the model')
     start_time = time.time()
     neural_network = NeuralNetworkModel(input_shape=dictionary_preprocess['data_split']['input_shape'], output_shape=dictionary_preprocess['data_split']['output_shape'], layer_sizes=dictionary_hyperparams['layer_sizes'], activations=dictionary_hyperparams['activations'], dropout_rates=dictionary_hyperparams['dropout_rates'], kernel_regularizer=dictionary_hyperparams['kernel_regularizer'],
-                                        num_conv_layers=dictionary_hyperparams['num_conv_layers'],use_batch_norm=dictionary_hyperparams['use_batch_norm'], use_initializer=dictionary_hyperparams['use_initializer'], use_dropout=dictionary_hyperparams['use_dropout'], use_initial_skip_connections=dictionary_hyperparams['use_initial_skip_connections'], use_intermediate_skip_connections=dictionary_hyperparams['use_intermediate_skip_connections'], learning_rate=dictionary_hyperparams['learning_rate'],
+                                        num_conv_layers=dictionary_hyperparams['num_conv_layers'],use_batch_norm=dictionary_hyperparams['use_batch_norm'], use_initializer=dictionary_hyperparams['use_initializer'], use_dropout=dictionary_hyperparams['use_dropout'], use_init_skip_connections=dictionary_hyperparams['use_init_skip_connections'], use_inter_skip_connections=dictionary_hyperparams['use_inter_skip_connections'], learning_rate=dictionary_hyperparams['learning_rate'],
                                         epochs=dictionary_hyperparams['epochs'])
 
     model = neural_network.create_model(outputs_path=dictionary_hyperparams['outputs_path'])
