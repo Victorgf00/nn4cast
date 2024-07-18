@@ -27,9 +27,8 @@ import tensorflow as tf
 
 hyperparameters = {
     # File paths
-    'path': '/home/victor/Desktop/prueba_nn4cast/Datasets/',
-    'path_x': 'HadISST1_sst_1870-2019.nc',
-    'path_y': 'slp_ERA5_1940-2023.nc',
+    'path_x': '/home/victor/Desktop/prueba_nn4cast/Datasets/HadISST1_sst_1870-2019.nc',
+    'path_y': '/home/victor/Desktop/prueba_nn4cast/Datasets/slp_ERA5_1940-2023.nc',
 
     # Time limits
     'time_lims': [1940, 2019],
