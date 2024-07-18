@@ -1249,12 +1249,12 @@ def Preprocess(dictionary_hyperparams):
     print('Preprocessing the data')
     start_time = time.time()
 
-    data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
+    data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],variable_name=dictionary_hyperparams['name_x'],
         months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
         detrend=dictionary_hyperparams['detrend_x'],detrend_window=dictionary_hyperparams['detrend_x_window'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'],train_years=dictionary_hyperparams['train_years'])
     
-    data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path']+dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
+    data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],variable_name=dictionary_hyperparams['name_y'],
         months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
         detrend=dictionary_hyperparams['detrend_y'],detrend_window=dictionary_hyperparams['detrend_y_window'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'],train_years=dictionary_hyperparams['train_years'])
@@ -1276,7 +1276,7 @@ def Preprocess(dictionary_hyperparams):
     return preprocessing_results
 
 def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
-    output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'best_model/')
+    output_directory = os..join(dictionary_hyperparams['outputs_'], 'best_model/')
 
     bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['input']['data'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['output']['data'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
         dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], output_directory, dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'], threshold=dictionary_hyperparams['p_value'])
@@ -1290,7 +1290,7 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
     best_model = tuner.get_best_models(num_models=1)[0]
     best_model.save(output_directory+'best_model.h5')  # Save the model in HDF5 format
     # Save the hyperparameters
-    with open(os.path.join(output_directory, 'hyperparameters_bm.txt'), 'w') as f:
+    with open(os..join(output_directory, 'hyperparameters_bm.txt'), 'w') as f:
         f.write(str(tuner.get_best_hyperparameters()[0].values))
     # Save each dataset to a NetCDF file in the 'data_outputs' folder
     for i, ds in enumerate(datasets, start=1):
