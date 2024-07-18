@@ -27,8 +27,9 @@ import tensorflow as tf
 
 hyperparameters = {
     # File paths
-    'path_x': '/home/victor/Desktop/prueba_nn4cast/Datasets/HadISST1_sst_1870-2019.nc',
-    'path_y': '/home/victor/Desktop/prueba_nn4cast/Datasets/slp_ERA5_1940-2023.nc',
+    # Replace this with the actual paths to the files on your system.
+    'path_x': '/path/to/your/data/HadISST1_sst_1870-2019.nc',
+    'path_y': /path/to/your/data/slp_ERA5_1940-2023.nc',
 
     # Time limits
     'time_lims': [1940, 2019],
@@ -99,8 +100,8 @@ hyperparameters = {
     'region_predictor': 'Pacific',
     'p_value': 0.1,
 
-    # Outputs path: define where to save all the plots and datasets
-    'outputs_path': '/home/victor/Desktop/prueba_nn4cast/Prueba_slp/Outputs_ND_sst_SO_Pac/'}
+    # Outputs path: define where to save all the plots and datasets, replace this with the actual paths to the files on your system.
+    'outputs_path': '/path/to/the/directory/Outputs_ND_sst_SO_Pac/'}
 
 Dictionary_saver(hyperparameters) #this is to save the dictionary, it will ask to overwrite if there is another with the same name in the directory
 
