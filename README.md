@@ -89,8 +89,8 @@ hyperparameters = {
     'use_batch_norm':True, 
     'use_initializer':True, 
     'use_dropout':True, 
-    'use_initial_skip_connections':False, 
-    'use_intermediate_skip_connections':False,
+    'use_init_skip_connections':False, 
+    'use_inter_skip_connections':False,
 
     # Plotting parameters
     'mapbar': 'bwr',
