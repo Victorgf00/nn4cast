@@ -28,7 +28,7 @@ import tensorflow as tf
 hyperparameters = {
     # File paths, replace this with the actual paths to the files on your system.
     'path_x': '/path/to/your/data/HadISST1_sst_1870-2019.nc',
-    'path_y': /path/to/your/data/slp_ERA5_1940-2023.nc',
+    'path_y': '/path/to/your/data/slp_ERA5_1940-2023.nc',
 
     # Time limits
     'time_lims': [1940, 2019],
