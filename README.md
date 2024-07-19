@@ -18,7 +18,7 @@ To update to the latest version:
 ```console
     (<your-env-name>) $ pip install --upgrade git+https://github.com/Victorgf00/nn4cast
 ```
-## Example usage: predict Atlantic SLP anomalies from JF with Pacific SST ND anomalies
+## Example usage: predict Atlantic SLP anomalies from ND with Pacific SST SO anomalies
 ### I. Import the functions and define the hyperparameters as a dictionary
 ```python
 from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher,Results_plotter,PC_analysis
