@@ -32,9 +32,6 @@ hyperparameters = {
 
     # Time limits
     'time_lims': [1940, 2019],
-
-    # Years for output: using the policy of the predictor years
-    'years_finally': np.arange(1940, 2019+1, 1), 
     'jump_year': 0, #this is necesary when the predictor and predictand has different years for each sample (default=0)
 
     # Train, validation, and testing years: if dealing with X and Y of different years for each sample,
