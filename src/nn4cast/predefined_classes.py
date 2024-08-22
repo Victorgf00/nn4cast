@@ -1276,7 +1276,7 @@ def Preprocess(dictionary_hyperparams):
     return preprocessing_results
 
 def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
-    output_directory = os..join(dictionary_hyperparams['outputs_'], 'best_model/')
+    output_directory = os.path.join(dictionary_hyperparams['outputs_'], 'best_model/')
 
     bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['input']['data'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['output']['data'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
         dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], output_directory, dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'], threshold=dictionary_hyperparams['p_value'])
@@ -1290,7 +1290,7 @@ def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_pos
     best_model = tuner.get_best_models(num_models=1)[0]
     best_model.save(output_directory+'best_model.h5')  # Save the model in HDF5 format
     # Save the hyperparameters
-    with open(os..join(output_directory, 'hyperparameters_bm.txt'), 'w') as f:
+    with open(os.path.join(output_directory, 'hyperparameters_bm.txt'), 'w') as f:
         f.write(str(tuner.get_best_hyperparameters()[0].values))
     # Save each dataset to a NetCDF file in the 'data_outputs' folder
     for i, ds in enumerate(datasets, start=1):
