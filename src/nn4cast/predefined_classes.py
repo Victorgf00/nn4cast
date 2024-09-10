@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import xarray as xr
 from scipy import stats as sts
@@ -13,8 +14,10 @@ import cartopy as car
 import numpy.linalg as linalg
 import numpy.ma as ma
 from scipy.stats import pearsonr
+from scipy.stats import t
 import matplotlib.dates as mdates
 import matplotlib.colors as colors
+from matplotlib.ticker import MaxNLocator
 from matplotlib.colors import from_levels_and_colors
 from cartopy.util import add_cyclic_point 
 import xskillscore as xs
@@ -41,6 +44,7 @@ warnings.filterwarnings("ignore")
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import load_model
+plt.style.use('seaborn-v0_8-darkgrid')
 
 class ClimateDataPreprocessing:
     """
@@ -69,7 +73,7 @@ class ClimateDataPreprocessing:
 
     def __init__(
         self, relative_path, lat_lims, lon_lims, time_lims, scale=1,regrid_degree=1, variable_name=None, latitude_regrid=False,
-        months=None, months_to_drop=None, years_out=None, detrend=False, detrend_window=10, jump_year=0, mean_seasonal_method=True,train_years=None):
+        months=None, months_to_drop=None, years_out=None, detrend=False, detrend_window=15, jump_year=0, mean_seasonal_method=True,train_years=None):
         """
         Initialize the ClimateDataProcessing class with the specified parameters.
 
@@ -157,7 +161,8 @@ class ClimateDataPreprocessing:
         if self.mean_seasonal_method==True:  
             mean_data /= len(self.months)
 
-        years_out= self.years_out + self.jump_year
+        years_out = np.arange(self.years_out[0], self.years_out[1]+1,1)
+        years_out= years_out + self.jump_year
 
         data_red = xr.DataArray(
             data=mean_data, dims=["year", "latitude", "longitude"],
@@ -350,7 +355,7 @@ class NeuralNetworkModel:
             x = tf.keras.layers.Conv2D(filters=self.num_filters, kernel_size=(self.kernel_size, self.kernel_size), padding='same', kernel_initializer='he_normal', kernel_regularizer=tf.keras.regularizers.L2(l2=0.05), name=f"conv_layer_{i+1}")(x)
             if self.use_batch_norm:
                 x = tf.keras.layers.BatchNormalization(name=f"batch_norm_{i+1}")(x)
-            x = tf.keras.layers.Activation('elu', name=f'activation_{i+1}')(x)
+            x = tf.keras.layers.Activation('relu', name=f'activation_{i+1}')(x)
             # Store the current layer as a skip connection
             x = tf.keras.layers.MaxPooling2D(pool_size=(self.pool_size, self.pool_size), name=f"max_pooling_{i+1}")(x)
 
@@ -431,7 +436,7 @@ class NeuralNetworkModel:
         random.seed(self.random_seed)
         tf.compat.v1.random.set_random_seed(self.random_seed)
 
-        callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=50)
+        callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=75)
         model = self.create_model(outputs_path)
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate), loss=tf.keras.losses.MeanSquaredError())
         record = model.fit(X_train, Y_train, epochs=self.epochs, verbose=0, validation_data=(X_valid, Y_valid), callbacks=[callback])
@@ -548,17 +553,17 @@ class ClimateDataEvaluation:
             
         if pixel_style==True:
             # Create a pixel-based colormap plot on the given axis
-            im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm)
+            im = ax.pcolormesh(self.lon_y, self.lat_y, data, cmap=cmap1, transform=ccrs.PlateCarree(), norm=norm, zorder=1)
         else:
-            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend=str(extend), transform=ccrs.PlateCarree(), norm=norm)
+            im = ax.contourf(self.lon_y, self.lat_y, data, cmap=cmap1, levels=levs, extend=str(extend), transform=ccrs.PlateCarree(), norm=norm, zorder=1)
 
         # Add coastlines to the plot
-        ax.coastlines(linewidth=0.75)
+        ax.coastlines(linewidth=0.75, zorder=3)
 
         # Set the title for the plot
         ax.set_title(titulo, fontsize=18)
 
-        gl = ax.gridlines(draw_labels=True)
+        gl = ax.gridlines(draw_labels=True, zorder=4)
         gl.xlines = False
         gl.ylines = False
         gl.top_labels = False  # Disable top latitude labels
@@ -647,18 +652,16 @@ class ClimateDataEvaluation:
         observations = correct_value.rename({'year': 'time'})
         spatial_correlation = xr.corr(predictions, observations, dim='time')
         p_value = xs.pearson_r_p_value(predictions, observations, dim='time')
-        # Plot significant pixels with point hatching
-        skill = ma.masked_where(p_value > threshold, spatial_correlation)
 
         # Calculate temporal correlations
         temporal_correlation = xr.corr(predictions, observations, dim=('longitude', 'latitude'))
-        
+
         # Calculate spatial and temporal RMSE
         spatial_rmse = np.sqrt(((predictions - observations) ** 2).mean(dim='time'))
         temporal_rmse = np.sqrt(((predictions - observations) ** 2).mean(dim=('longitude', 'latitude')))
-
+        
         # Determine significant pixels
-        sig_pixels = np.abs(p_value) <= threshold
+        sig_pixels = np.abs(p_value) >= threshold
 
         # Set non-significant pixels to NaN
         spatial_correlation_sig = spatial_correlation.where(sig_pixels)
@@ -667,7 +670,7 @@ class ClimateDataEvaluation:
         fig = plt.figure(figsize=(15, 7))
 
         # Subplot 1: Spatial Correlation Map
-        ax = fig.add_subplot(221, projection=ccrs.PlateCarree(0))
+        ax = fig.add_subplot(221, projection=ccrs.PlateCarree())
         data = spatial_correlation
         rango = 1
         acc_clevs = [-1,-0.9,-0.8,-0.7,-0.6,-0.4,-0.2,0.2,0.4,0.6,0.7,0.8,0.9,1]
@@ -680,27 +683,34 @@ class ClimateDataEvaluation:
         lon_sig, lat_sig = spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').longitude, \
                         spatial_correlation_sig.stack(pixel=('longitude', 'latitude')).dropna('pixel').latitude
         
-        hatch_mask = p_value < threshold
-        ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
-
-        #ax.scatter(lon_sig, lat_sig, s=5, c='k', marker='.', alpha=0.5, transform=ccrs.PlateCarree(), label='Significant')
+        hatch_mask = p_value > threshold
+        ax.contourf(spatial_correlation.longitude, spatial_correlation.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['', '//'], alpha=0, transform=ccrs.PlateCarree(), zorder=2)
 
         # Subplot 2: Temporal Correlation Plot
         ax1 = fig.add_subplot(222)
-        data = {'time': temporal_correlation.time, 'Predictions correlation': temporal_correlation,}
+        data = {'time': temporal_correlation.time, 'Predictions correlation': temporal_correlation}
         df = pd.DataFrame(data)
         df.set_index('time', inplace=True)
         color_dict = {'Predictions correlation': 'blue'}
-        width = 0.5
+        width = 0.8
         for i, col in enumerate(df.columns):
             ax1.bar(df.index, df[col], width=width, color=color_dict[col], label=col)
 
-        ax1.set_ylim(ymin=-1, ymax=+1)
+        # Calculate the critical correlation values for the given p-value threshold
+        dof = len(predictions.time) - 2
+        t_crit = np.abs(t.ppf(threshold, dof))  # One-tailed threshold
+        critical_corr = t_crit / np.sqrt(dof + t_crit**2)
+
+        # Add dashed black horizontal lines for significance thresholds
+        ax1.axhline(y=critical_corr, color='black', linestyle='--', linewidth=1)
+        
+        ax1.set_ylim(ymin=-.75, ymax=+1)
         ax1.set_title('Time series of global ACC', fontsize=18)
-        ax1.legend(loc='upper right')
+        ax1.legend(loc='lower right')
+        ax1.xaxis.set_major_locator(MaxNLocator(integer=True))  # Ensure x-axis labels are integers
 
         # Subplot 3: Spatial RMSE Map
-        ax4 = fig.add_subplot(223, projection=ccrs.PlateCarree(0))
+        ax4 = fig.add_subplot(223, projection=ccrs.PlateCarree())
         data = spatial_rmse
         rango= int(np.nanmax(np.array(data)))
         ClimateDataEvaluation.plotter(self, data, np.linspace(0, rango+1, 10), 'OrRd','RMSE', 'RMSE map', ax4, pixel_style=True)
@@ -717,6 +727,7 @@ class ClimateDataEvaluation:
         ax5.set_title('Time series of global RMSE', fontsize=18)
         ax5.legend(loc='upper right')
         ax5.set_ylabel(f'{units}')
+        ax5.xaxis.set_major_locator(MaxNLocator(integer=True))  # Ensure x-axis labels are integers
         fig.suptitle(f'Comparison of metrics of {var_y} from months "{months_y}"  when predicting with {predictor_region} {var_x} from months "{months_x}"', fontsize=20)
         # Adjust layout and save the figure
         plt.tight_layout()
@@ -807,9 +818,6 @@ class ClimateDataEvaluation:
         years_division_list = []
         # Loop over the folds
         for i, (train_index, testing_index) in enumerate(kf.split(self.X)):
-            print(f'Fold {i+1}/{n_folds}')
-            print('Training on:',years[train_index])
-            print('Testing on:', years[testing_index])
             # Get the training and validation data for this fold
             X,Y = self.X.fillna(value=0), self.Y.fillna(value=0)
             mean_reference_x, mean_reference_y  = np.mean((X[train_index]), axis=0), np.mean((Y[train_index]), axis=0)
@@ -828,13 +836,41 @@ class ClimateDataEvaluation:
                 rolling_mean_y = Y.rolling(year=self.detrend_y_window, center=False).mean()
                 Y[self.detrend_y_window:] = Y[self.detrend_y_window:] - rolling_mean_y[self.detrend_y_window:]
 
-            X_train_fold = X[train_index]
-            Y_train_fold = Y[train_index]
+            # Randomly select 10% of the time steps from the training data for validation
+            num_train_steps = len(train_index)
+            validation_size = int(0.1 * num_train_steps)  # 10% of time steps
+            
+            # Save the current random state
+            saved_state = np.random.get_state()
+
+            # Use local random state for validation split without affecting the global seed
+            local_random = np.random.RandomState()  # Local random generator
+            validation_indices = local_random.choice(train_index, size=validation_size, replace=False)
+
+            # Restore the original random state
+            np.random.set_state(saved_state)
+
+            # Create the validation and updated training sets for the selected time steps
+            X_validation_fold = X[validation_indices, :]
+            Y_validation_fold = Y[validation_indices, :]
+
+            # Remove the validation indices from the training set
+            train_indices_updated = np.setdiff1d(train_index, validation_indices)
+            print(f'Fold {i+1}/{n_folds}')
+            print('Training on:',years[train_indices_updated])
+            print('Validating on:',years[validation_indices])
+            print('Testing on:', years[testing_index])
+            # Assign the updated training and testing sets
+            X_train_fold = X[train_indices_updated, :]
+            Y_train_fold = Y[train_indices_updated, :]
+
+            #X_train_fold = X[train_index]
+            #Y_train_fold = Y[train_index]
             X_testing_fold = X[testing_index]
             Y_testing_fold = Y[testing_index]
 
             model_cv = model_class.create_model()
-            model_cv, record= model_class.train_model(X_train=X_train_fold, Y_train=Y_train_fold, X_valid=X_train_fold, Y_valid=Y_train_fold)
+            model_cv, record= model_class.train_model(X_train=X_train_fold, Y_train=Y_train_fold, X_valid=X_validation_fold, Y_valid=Y_validation_fold)
             predicted_value,observed_value= ClimateDataEvaluation.evaluation(self, X_test_other=X_testing_fold, Y_test_other=Y_testing_fold, model_other=model_cv, years_other=[(years[testing_index])[0],(years[testing_index])[-1]])
             predicted_list.append(predicted_value)
             correct_value_list.append(observed_value)
@@ -895,22 +931,21 @@ class ClimateDataEvaluation:
                 predictions_loop = predictions_member.sel(time=slice(years_fold_div[0],years_fold_div[-1]))
                 spatial_correlation_member = xr.corr(predictions_loop, correct_value.sel(time=slice(years_fold_div[0],years_fold_div[-1])), dim='time')
                 p_value = xs.pearson_r_p_value(predictions_loop, correct_value.sel(time=slice(years_fold_div[0],years_fold_div[-1])), dim='time')
-                
+
                 # Plot the correlation map
                 ax = axes[i]
-
                 rango=1
                 if plot_differences==True:
                     data_member = spatial_correlation_member-spatial_correlation_global
                     im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1='PiYG_r', l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold_div[0])+'-'+str(years_fold_div[-1]), ax=ax, plot_colorbar=False)
-                    hatch_mask = p_value < threshold
-                    ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
+                    hatch_mask = p_value > threshold
+                    ax.contourf(data_member.longitude, data_member.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['', '//'], alpha=0, transform=ccrs.PlateCarree())
 
                 else:
                     data_member = spatial_correlation_member
                     im= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='Model tested in '+str(i+1)+': '+str(years_fold_div[0])+'-'+str(years_fold_div[-1]), ax=ax, plot_colorbar=False,acc_norm=acc_norm)
-                    hatch_mask = p_value < threshold
-                    ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
+                    hatch_mask = p_value > threshold
+                    ax.contourf(data_member.longitude, data_member.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['', '//'], alpha=0, transform=ccrs.PlateCarree())
 
                 if i==n_folds-1:
                     rango=1
@@ -918,8 +953,8 @@ class ClimateDataEvaluation:
                     ax = axes[i+1]
                     data_member = spatial_correlation_global
                     im2= ClimateDataEvaluation.plotter(self, data=data_member,levs=acc_clevs, cmap1=acc_map, l1='Correlation', titulo='ACC Global', ax=ax, plot_colorbar=False,acc_norm=acc_norm)
-                    hatch_mask = p_value_global < threshold
-                    ax.contourf(hatch_mask.longitude, hatch_mask.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['//', ''], alpha=0, transform=ccrs.PlateCarree())
+                    hatch_mask = p_value_global > threshold
+                    ax.contourf(data_member.longitude, data_member.latitude, hatch_mask, levels=[0, 0.5, 1], hatches=['', '//'], alpha=0, transform=ccrs.PlateCarree())
 
         # remove unused axes
         for ax in axes[n_folds+1:]:
@@ -1092,7 +1127,7 @@ class BestModelAnalysis:
             num_conv_layers = hp.Int('#_convolutional_layers', 0, pos_conv_layers)
             if num_conv_layers>0:
                 print("Number of Convolutional Layers:", num_conv_layers)
-                num_filters = hp.Choice('number_of_filters_per_conv', [1,4,16])
+                num_filters = hp.Choice('number_of_filters_per_conv', [2,4,16])
                 print("Number of filters:", num_filters)
                 pool_size = hp.Choice('pool size', [2,4])
                 print("Pool size:", pool_size)
@@ -1160,7 +1195,7 @@ class BestModelAnalysis:
             lambda hp: BestModelAnalysis.build_model(self,hp=hp),  # Pass the dictionary as an argument
             objective='val_loss',
             max_trials=max_trials,
-            executions_per_trial=1, 
+            executions_per_trial=2, 
             directory=trial_dir)
 
         tuner.search(np.array(self.X_train), np.array(self.Y_train),
@@ -1248,15 +1283,19 @@ def Dictionary_saver(dictionary):
 def Preprocess(dictionary_hyperparams):
     print('Preprocessing the data')
     start_time = time.time()
+    if dictionary_hyperparams['months_skip_x'] and dictionary_hyperparams['months_skip_y'] == ['None']:
+        years_out = [dictionary_hyperparams['time_lims'][0], dictionary_hyperparams['time_lims'][1]-dictionary_hyperparams['jump_year']]
+    else:
+        years_out = [dictionary_hyperparams['time_lims'][0], dictionary_hyperparams['time_lims'][1]-1-dictionary_hyperparams['jump_year']]
 
     data_mining_x = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path_x'],lat_lims=dictionary_hyperparams['lat_lims_x'],lon_lims=dictionary_hyperparams['lon_lims_x'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_x'],regrid_degree=dictionary_hyperparams['regrid_degree_x'],variable_name=dictionary_hyperparams['name_x'],
-        months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=dictionary_hyperparams['years_finally'], 
+        months=dictionary_hyperparams['months_x'],months_to_drop=dictionary_hyperparams['months_skip_x'], years_out=years_out, 
         detrend=dictionary_hyperparams['detrend_x'],detrend_window=dictionary_hyperparams['detrend_x_window'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_x'],train_years=dictionary_hyperparams['train_years'])
     
     data_mining_y = ClimateDataPreprocessing(relative_path=dictionary_hyperparams['path_y'],lat_lims=dictionary_hyperparams['lat_lims_y'],lon_lims=dictionary_hyperparams['lon_lims_y'],
         time_lims=dictionary_hyperparams['time_lims'],scale=dictionary_hyperparams['scale_y'],regrid_degree=dictionary_hyperparams['regrid_degree_y'],variable_name=dictionary_hyperparams['name_y'],
-        months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=dictionary_hyperparams['years_finally'], 
+        months=dictionary_hyperparams['months_y'],months_to_drop=dictionary_hyperparams['months_skip_y'], years_out=years_out, 
         detrend=dictionary_hyperparams['detrend_y'],detrend_window=dictionary_hyperparams['detrend_y_window'], jump_year= dictionary_hyperparams['jump_year'],mean_seasonal_method=dictionary_hyperparams['mean_seasonal_method_y'],train_years=dictionary_hyperparams['train_years'])
         
     # Preprocess data
@@ -1276,7 +1315,7 @@ def Preprocess(dictionary_hyperparams):
     return preprocessing_results
 
 def Model_searcher(dictionary_hyperparams, dictionary_preprocess, dictionary_possibilities, max_trials=10, n_cv_folds=12):
-    output_directory = os.path.join(dictionary_hyperparams['outputs_'], 'best_model/')
+    output_directory = os.path.join(dictionary_hyperparams['outputs_path'], 'best_model/')
 
     bm_class= BestModelAnalysis(dictionary_preprocess['data_split']['input_shape'], dictionary_preprocess['data_split']['output_shape'], dictionary_preprocess['input']['data'], dictionary_preprocess['data_split']['X_train'],dictionary_preprocess['data_split']['X_valid'], dictionary_preprocess['data_split']['X_test'], dictionary_preprocess['output']['data'], dictionary_preprocess['data_split']['Y_train'], dictionary_preprocess['data_split']['Y_valid'], dictionary_preprocess['data_split']['Y_test'], 
         dictionary_preprocess['output']['lon'], dictionary_preprocess['output']['lat'], dictionary_preprocess['output']['std'], dictionary_hyperparams['time_lims'],  dictionary_hyperparams['train_years'], dictionary_hyperparams['testing_years'], dictionary_possibilities, dictionary_hyperparams['epochs'], output_directory, dictionary_preprocess['output']['normalized'], jump_year=dictionary_hyperparams['jump_year'], threshold=dictionary_hyperparams['p_value'])
@@ -1368,7 +1407,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
         data_output_pred, data_output_obs= predictions.sel(time=i+hyperparameters['jump_year']), observations.sel(year=i+hyperparameters['jump_year'])
         
         if plot_with_contours==True:
-            ax = fig.add_subplot(121, projection=ccrs.PlateCarree(central_longitude=-180))
+            ax = fig.add_subplot(121, projection=ccrs.PlateCarree((hyperparameters['lon_lims_x'][1]-hyperparameters['lat_lims_x'][0])/2))
             ax2 = fig.add_subplot(122, projection=ccrs.PlateCarree())
             im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y+rang_y/10, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
             im3= ax2.contour(data_output_obs.longitude,data_output_obs.latitude,data_output_obs,colors='black',levels=np.arange(-rang_y, rang_y, rang_y/5),extend='both',transform=ccrs.PlateCarree())
@@ -1376,7 +1415,7 @@ def Results_plotter(hyperparameters, dictionary_preprocess, rang_x, rang_y, pred
             ax2.set_title(f"{hyperparameters['name_y']} of months '{hyperparameters['months_y']}' from year {str(i+hyperparameters['jump_year'])}. Pred=colours and Obs=lines",fontsize=10)
 
         else:
-            ax = fig.add_subplot(131, projection=ccrs.PlateCarree(central_longitude=-180))
+            ax = fig.add_subplot(131, projection=ccrs.PlateCarree((hyperparameters['lon_lims_x'][1]-hyperparameters['lat_lims_x'][0])/2))
             ax2 = fig.add_subplot(132, projection=ccrs.PlateCarree())
             ax3 = fig.add_subplot(133, projection=ccrs.PlateCarree())
             im2= evaluations_toolkit_output.plotter(np.array(data_output_pred), np.arange(-rang_y, rang_y+rang_y/10, rang_y/10), 'RdBu_r',f'Anomalies {hyperparameters["units_y"]}', '', ax2, pixel_style=False, plot_colorbar=False, extend='both')
@@ -1527,7 +1566,6 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
         eofs_obs_list.append(eof_obs)
         
         # Create a new figure
-        plt.style.use('default')
         fig = plt.figure(figsize=(20, 3))
         # Subplot 1: Spatial Correlation Map
         ax = fig.add_subplot(141, projection=ccrs.PlateCarree())
@@ -1547,9 +1585,7 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
         gl.right_labels = False  # Disable right longitude labels
 
         ax = fig.add_subplot(142)
-        ax.plot(np.array(years),pcs_pred[i,:])
-        ax.grid()
-        
+        ax.plot(np.array(years),pcs_pred[i,:])        
         ax = fig.add_subplot(143, projection=ccrs.PlateCarree())
         rango = max((abs(np.nanmin(np.array(eof_obs))),abs(np.nanmax(np.array(eof_obs)))))
         num_levels = 20
@@ -1568,7 +1604,6 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
 
         ax = fig.add_subplot(144)
         ax.plot(np.array(years),pcs_obs[i,:])
-        ax.grid()
         fig.suptitle(f'EOF and PC {hyperparameters["name_y"]} from months "{hyperparameters["months_y"]}"  for mode {i+1} with variance ratio predicted: {explained_variance_pred[i]*100:.2f} % and observed: {explained_variance_obs[i]*100:.2f} % ', fontsize=15)
         output_directory = os.path.join(hyperparameters['outputs_path'], 'PC_analysis')
         os.makedirs(output_directory, exist_ok=True)
@@ -1605,7 +1640,6 @@ def PC_analysis(hyperparameters, prediction, observation, n_modes, n_clusters, c
 
         for i in range(0,n_clusters):
             # Create a new figure
-            plt.style.use('default')
             fig = plt.figure(figsize=(20, 3))
             # Subplot 1: Spatial Correlation Map
             ax = fig.add_subplot(121, projection=ccrs.PlateCarree())
