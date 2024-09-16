@@ -23,7 +23,7 @@ To update to the latest version:
 ```python
 from nn4cast.predefined_classes import Dictionary_saver,Preprocess,Model_build_and_test,Model_searcher,Results_plotter,PC_analysis
 import numpy as np
-import tensorflow as tf
+from tensorflow.keras import activations
 
 hyperparameters = {
     # File paths, replace this with the actual paths to the files on your system.
@@ -71,13 +71,13 @@ hyperparameters = {
 
     # Detrending:
     'detrend_x': True, 
-    'detrend_x_window': 15,
+    'detrend_x_window': 50,
     'detrend_y': True,
-    'detrend_y_window': 15,
+    'detrend_y_window': 50,
 
     # Neural network hyperparameters (default parameters)
-    'layer_sizes': [1024, 256, 64],
-    'activations': [tf.keras.activations.elu, tf.keras.activations.elu, tf.keras.activations.elu],
+    'layer_sizes': [1024, 256, 64, 256, 1024],
+    'activations': [activations.elu, activations.elu, activations.elu, activations.elu, tf.keras.activations.elu],
     'dropout_rates': [0.1],
     'kernel_regularizer': 'l2',
     'learning_rate': 0.0001,
