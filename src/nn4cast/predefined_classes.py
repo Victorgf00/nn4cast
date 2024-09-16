@@ -953,7 +953,7 @@ class ClimateDataEvaluation:
             correct_value_list.append(observed_value)
             years_division_list.append(years[testing_index])
             if self.importances:
-                imp_fold = ClimateDataEvaluation.atributions(self, model_cv, X_testing_fold, lat_lims=self.region_atributted[0], lon_lims=self.region_atributted[1], std_y=std_reference_y, test_years=years[testing_index])
+                imp_fold = ClimateDataEvaluation.attributions(self, model_cv, X_testing_fold, lat_lims=self.region_atributted[0], lon_lims=self.region_atributted[1], std_y=std_reference_y, test_years=years[testing_index])
                 importances_list.append(imp_fold)
                 
         # Concatenate all the predicted values in the list into one global dataarray
