@@ -1441,7 +1441,7 @@ class BestModelAnalysis:
                 months_x=months_x, months_y=months_y, predictor_region=predictor_region, var_x=var_x, 
                 var_y=var_y, best_model=True
             )
-            return predicted_global, correct_value, fig2, fig3
+            return predicted_global, correct_value
 
 def Dictionary_saver(dictionary):
     """
