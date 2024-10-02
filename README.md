@@ -142,6 +142,7 @@ outputs_bm_cross_validation = Model_searcher(dictionary_hyperparams=hyperparamet
 
 ## Citation
 If you use this software in your work, please cite our paper: 
+```markdown
 @article{galvan2024nn4cast,
   title={NN4CAST: An end-to-end deep learning application for seasonal climate forecasts},
   author={Galván Fraile, Víctor and Rodríguez-Fonseca, Belén and Polo, Irene and Martín-Rey, Marta and Moreno-García, María N},
@@ -151,7 +152,6 @@ If you use this software in your work, please cite our paper:
   year={2024},
   publisher={Copernicus Publications G{\"o}ttingen, Germany}
 }
-```markdown
 ```
 
 ## Contribution
